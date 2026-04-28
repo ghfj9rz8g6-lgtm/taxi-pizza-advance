@@ -8,6 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const SHEET_ID = "1GwTd-C6ryVqNtYZvLaZygCe3Sv8SyumRKba4c7kBCcM";
 const SHEET_NAME = "Лист1";
+const GOOGLE_CACHE_KEY = "rodina_google_matches_cache_v1";
 
 const advanceMonths = [
   ["03", "Март"],
@@ -202,6 +203,53 @@ function loadGoogleSheetJsonp() {
   });
 }
 
+function parseGoogleRowsToMatches(rows) {
+  const matches = [];
+
+  for (const block of googleBlocks) {
+    for (let i = 0; i < rows.length; i++) {
+      const date = normalizeDate(rows[i]?.[block.dateCol]);
+      const rawOpponent = rows[i]?.[block.opponentCol] || "";
+
+      if (!date || !rawOpponent.trim()) continue;
+      if (isHomeOpponent(rawOpponent)) continue;
+
+      matches.push({
+        id: `g-${block.team}-${date}-${cleanOpponent(rawOpponent)}-${i}`,
+        source: "google",
+        team: block.team,
+        date,
+        opponent: cleanOpponent(rawOpponent),
+        match_type: "выезд",
+      });
+    }
+  }
+
+  return matches;
+}
+
+function readGoogleCache() {
+  try {
+    const raw = localStorage.getItem(GOOGLE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.matches)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveGoogleCache(matches) {
+  localStorage.setItem(
+    GOOGLE_CACHE_KEY,
+    JSON.stringify({
+      saved_at: new Date().toISOString(),
+      matches,
+    })
+  );
+}
+
 function getWeeksForMonth2026(monthNum) {
   const year = 2026;
   const monthIndex = Number(monthNum) - 1;
@@ -232,7 +280,6 @@ function getWeeksForMonth2026(monthNum) {
         label: `${formatRuDate(toIsoDate(weekStart))}–${formatRuDate(toIsoDate(weekEnd))}`,
         days: Array.from({ length: 7 }, (_, i) => {
           const d = addDays(weekStart, i);
-
           return {
             iso: toIsoDate(d),
             label: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][i],
@@ -278,6 +325,8 @@ export default function App() {
   const [editingEventId, setEditingEventId] = useState(null);
 
   const [trainingData, setTrainingData] = useState({});
+  const [activeTimeTarget, setActiveTimeTarget] = useState(null);
+
   const [matchHomeAway, setMatchHomeAway] = useState("home");
   const [matchTime, setMatchTime] = useState("");
   const [matchTournament, setMatchTournament] = useState("");
@@ -302,7 +351,46 @@ export default function App() {
   }, [dynWeeks, dynWeekStart]);
 
   async function loadAll() {
-    await Promise.all([loadTariffs(), loadManualMatches(), loadGoogleMatches()]);
+    loadGoogleFromCache();
+    await Promise.all([loadTariffs(), loadManualMatches()]);
+  }
+
+  function loadGoogleFromCache() {
+    const cached = readGoogleCache();
+
+    if (cached) {
+      setGoogleMatches(cached.matches);
+      const date = new Date(cached.saved_at);
+      setStatus(`Google-таблица: данные из кэша, ${date.toLocaleString("ru-RU")}`);
+    } else {
+      setStatus("Google-таблица: кэша нет, нажми «Обновить Google-таблицу»");
+    }
+  }
+
+  async function refreshGoogleMatches() {
+    setStatus("Google-таблица: обновление...");
+    setError("");
+
+    try {
+      const rows = await loadGoogleSheetJsonp();
+      const matches = parseGoogleRowsToMatches(rows);
+
+      setGoogleMatches(matches);
+      saveGoogleCache(matches);
+
+      setStatus(`Google-таблица: обновлено гостевых матчей ${matches.length}`);
+    } catch (e) {
+      const cached = readGoogleCache();
+
+      if (cached) {
+        setGoogleMatches(cached.matches);
+        setStatus("Google-таблица: Google не ответил, оставлены данные из кэша");
+        setError("Не удалось обновить Google-таблицу: " + e.message);
+      } else {
+        setStatus("Google-таблица: ошибка");
+        setError("Не удалось загрузить Google-таблицу: " + e.message);
+      }
+    }
   }
 
   async function loadTariffs() {
@@ -329,41 +417,6 @@ export default function App() {
     }
 
     setManualMatches(data || []);
-  }
-
-  async function loadGoogleMatches() {
-    setStatus("Google-таблица: загрузка...");
-    setError("");
-
-    try {
-      const rows = await loadGoogleSheetJsonp();
-      const matches = [];
-
-      for (const block of googleBlocks) {
-        for (let i = 0; i < rows.length; i++) {
-          const date = normalizeDate(rows[i]?.[block.dateCol]);
-          const rawOpponent = rows[i]?.[block.opponentCol] || "";
-
-          if (!date || !rawOpponent.trim()) continue;
-          if (isHomeOpponent(rawOpponent)) continue;
-
-          matches.push({
-            id: `g-${block.team}-${date}-${cleanOpponent(rawOpponent)}-${i}`,
-            source: "google",
-            team: block.team,
-            date,
-            opponent: cleanOpponent(rawOpponent),
-            match_type: "выезд",
-          });
-        }
-      }
-
-      setGoogleMatches(matches);
-      setStatus(`Google-таблица: загружено гостевых матчей ${matches.length}`);
-    } catch (e) {
-      setStatus("Google-таблица: ошибка");
-      setError("Не удалось загрузить Google-таблицу: " + e.message);
-    }
   }
 
   async function loadDynamovetsData() {
@@ -672,6 +725,7 @@ export default function App() {
     setEditingEventId(null);
     setDynEventType("training");
     setTrainingData({});
+    setActiveTimeTarget(null);
     setMatchHomeAway("home");
     setMatchTime("");
     setMatchTournament("");
@@ -684,6 +738,7 @@ export default function App() {
     setDynYear(Number(event.team_year));
     setDynSelectedDate(event.event_date);
     setDynEventType(event.event_type);
+    setActiveTimeTarget(null);
 
     if (event.event_type === "training") {
       const next = {};
@@ -983,7 +1038,7 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <button className="secondary" onClick={loadGoogleMatches}>
+            <button className="secondary" onClick={refreshGoogleMatches}>
               Обновить Google-таблицу
             </button>
           </section>
@@ -1357,7 +1412,7 @@ export default function App() {
                 {dynEventType === "training" && (
                   <div className="form-group">
                     <label>Место тренировки</label>
-                    <div className="buttons">
+                    <div className="buttons place-buttons">
                       {trainingPlaces.map((place) => (
                         <button
                           key={place}
@@ -1369,38 +1424,50 @@ export default function App() {
                       ))}
                     </div>
 
-                    {Object.entries(trainingData).map(([place, data]) => (
-                      <div className="training-item-form" key={place}>
-                        <b>{place}</b>
+                    <div className="training-items-list">
+                      {Object.entries(trainingData).map(([place, data]) => (
+                        <div className="training-item-form" key={place}>
+                          <div className="training-place-title">{place}</div>
 
-                        <TimeSelect
-                          value={data.start || ""}
-                          onChange={(value) => updateTrainingPlace(place, "start", value)}
-                        />
+                          <TimePicker
+                            label="Начало"
+                            value={data.start || ""}
+                            targetKey={`${place}-start`}
+                            activeTimeTarget={activeTimeTarget}
+                            setActiveTimeTarget={setActiveTimeTarget}
+                            onChange={(value) => updateTrainingPlace(place, "start", value)}
+                          />
 
-                        <TimeSelect
-                          value={data.end || ""}
-                          onChange={(value) => updateTrainingPlace(place, "end", value)}
-                        />
+                          <TimePicker
+                            label="Окончание"
+                            value={data.end || ""}
+                            targetKey={`${place}-end`}
+                            activeTimeTarget={activeTimeTarget}
+                            setActiveTimeTarget={setActiveTimeTarget}
+                            onChange={(value) => updateTrainingPlace(place, "end", value)}
+                          />
 
-                        {place !== "Зал" && (
-                          <div className="buttons">
-                            <button
-                              className={data.field_size === "Полное поле" ? "active" : ""}
-                              onClick={() => updateTrainingPlace(place, "field_size", "Полное поле")}
-                            >
-                              Полное поле
-                            </button>
-                            <button
-                              className={data.field_size === "1/2 поля" ? "active" : ""}
-                              onClick={() => updateTrainingPlace(place, "field_size", "1/2 поля")}
-                            >
-                              1/2 поля
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          {place !== "Зал" && (
+                            <div className="buttons field-size-buttons">
+                              <button
+                                className={data.field_size === "Полное поле" ? "active" : ""}
+                                onClick={() =>
+                                  updateTrainingPlace(place, "field_size", "Полное поле")
+                                }
+                              >
+                                Полное поле
+                              </button>
+                              <button
+                                className={data.field_size === "1/2 поля" ? "active" : ""}
+                                onClick={() => updateTrainingPlace(place, "field_size", "1/2 поля")}
+                              >
+                                1/2 поля
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1428,8 +1495,14 @@ export default function App() {
                       </button>
                     </div>
 
-                    <label>Время матча</label>
-                    <TimeSelect value={matchTime} onChange={setMatchTime} />
+                    <TimePicker
+                      label="Время матча"
+                      value={matchTime}
+                      targetKey="match-time"
+                      activeTimeTarget={activeTimeTarget}
+                      setActiveTimeTarget={setActiveTimeTarget}
+                      onChange={setMatchTime}
+                    />
 
                     <label>Турнир</label>
                     <input
@@ -1539,16 +1612,45 @@ export default function App() {
   );
 }
 
-function TimeSelect({ value, onChange }) {
+function TimePicker({
+  label,
+  value,
+  onChange,
+  targetKey,
+  activeTimeTarget,
+  setActiveTimeTarget,
+}) {
+  const isOpen = activeTimeTarget === targetKey;
+
   return (
-    <select className="time-select" value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Выбери время</option>
-      {timeOptions.map((time) => (
-        <option key={time} value={time}>
-          {time}
-        </option>
-      ))}
-    </select>
+    <div className="time-picker">
+      <label>{label}</label>
+      <button
+        type="button"
+        className={value ? "time-main active" : "time-main"}
+        onClick={() => setActiveTimeTarget(isOpen ? null : targetKey)}
+      >
+        {value || "Выбрать время"}
+      </button>
+
+      {isOpen && (
+        <div className="time-options">
+          {timeOptions.map((time) => (
+            <button
+              type="button"
+              key={time}
+              className={value === time ? "active" : ""}
+              onClick={() => {
+                onChange(time);
+                setActiveTimeTarget(null);
+              }}
+            >
+              {time}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
