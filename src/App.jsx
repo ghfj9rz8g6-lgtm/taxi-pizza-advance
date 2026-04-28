@@ -137,9 +137,11 @@ function loadGoogleSheetJsonp() {
       cleanup();
       reject(new Error("Google Sheets не ответил"));
     };
+
     script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(
       SHEET_NAME
     )}&tqx=responseHandler:${callbackName}&cacheBust=${Date.now()}`;
+
     document.body.appendChild(script);
   });
 }
@@ -170,10 +172,12 @@ export default function App() {
 
   async function loadTariffs() {
     const { data, error } = await supabase.from("tariffs").select("*");
+
     if (error) {
       setError("Ошибка загрузки тарифов: " + error.message);
       return;
     }
+
     setTariffs(data || []);
   }
 
@@ -296,10 +300,12 @@ export default function App() {
     setError("");
 
     const day = intValue(formDay);
+
     if (!day || day < 1 || day > 31) {
       setError("Укажи день от 1 до 31.");
       return;
     }
+
     if (!formOpponent.trim()) {
       setError("Укажи соперника.");
       return;
@@ -325,21 +331,27 @@ export default function App() {
 
   async function deleteManualMatch(id) {
     const { error } = await supabase.from("manual_matches").delete().eq("id", id);
+
     if (error) {
       setError("Ошибка удаления матча: " + error.message);
       return;
     }
+
     await loadManualMatches();
   }
 
   function updateTariffLocal(team, type, field, value) {
     setTariffs((prev) => {
       const exists = prev.find((t) => t.team === team && t.match_type === type);
+
       if (exists) {
         return prev.map((t) =>
-          t.team === team && t.match_type === type ? { ...t, [field]: intValue(value) } : t
+          t.team === team && t.match_type === type
+            ? { ...t, [field]: intValue(value) }
+            : t
         );
       }
+
       return [
         ...prev,
         {
@@ -504,10 +516,16 @@ export default function App() {
                       </span>
                     </div>
                     <div>{m.opponent}</div>
-                    <button className={s.taxi ? "service on" : "service"} onClick={() => toggle(m.id, "taxi")}>
+                    <button
+                      className={s.taxi ? "service on" : "service"}
+                      onClick={() => toggle(m.id, "taxi")}
+                    >
                       Такси
                     </button>
-                    <button className={s.pizza ? "service on" : "service"} onClick={() => toggle(m.id, "pizza")}>
+                    <button
+                      className={s.pizza ? "service on" : "service"}
+                      onClick={() => toggle(m.id, "pizza")}
+                    >
                       Пицца
                     </button>
                   </div>
@@ -531,43 +549,72 @@ export default function App() {
         <section className="card">
           <h2>Ручные матчи</h2>
 
-          <label>Команда</label>
-          <div className="buttons">
-            {manualTeams.map((t) => (
-              <button key={t} className={formTeam === t ? "active" : ""} onClick={() => setFormTeam(t)}>
-                {t}
+          <div className="manual-form">
+            <div className="form-group">
+              <label>Команда</label>
+              <div className="buttons">
+                {manualTeams.map((t) => (
+                  <button
+                    key={t}
+                    className={formTeam === t ? "active" : ""}
+                    onClick={() => setFormTeam(t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Месяц</label>
+              <div className="buttons">
+                {months.map(([num, name]) => (
+                  <button
+                    key={num}
+                    className={formMonth === num ? "active" : ""}
+                    onClick={() => setFormMonth(num)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>День</label>
+              <input value={formDay} onChange={(e) => setFormDay(e.target.value)} placeholder="12" />
+            </div>
+
+            <div className="form-group">
+              <label>Соперник</label>
+              <input
+                value={formOpponent}
+                onChange={(e) => setFormOpponent(e.target.value)}
+                placeholder="Спартак"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Тип матча</label>
+              <div className="buttons">
+                <button className={formType === "дом" ? "active" : ""} onClick={() => setFormType("дом")}>
+                  Дом
+                </button>
+                <button
+                  className={formType === "выезд" ? "active" : ""}
+                  onClick={() => setFormType("выезд")}
+                >
+                  Выезд
+                </button>
+              </div>
+            </div>
+
+            <div className="manual-actions">
+              <button className="primary add-match-button" onClick={addManualMatch}>
+                Добавить матч
               </button>
-            ))}
+            </div>
           </div>
-
-          <label>Месяц</label>
-          <div className="buttons">
-            {months.map(([num, name]) => (
-              <button key={num} className={formMonth === num ? "active" : ""} onClick={() => setFormMonth(num)}>
-                {name}
-              </button>
-            ))}
-          </div>
-
-          <label>День</label>
-          <input value={formDay} onChange={(e) => setFormDay(e.target.value)} placeholder="12" />
-
-          <label>Соперник</label>
-          <input value={formOpponent} onChange={(e) => setFormOpponent(e.target.value)} placeholder="Спартак" />
-
-          <label>Тип матча</label>
-          <div className="buttons">
-            <button className={formType === "дом" ? "active" : ""} onClick={() => setFormType("дом")}>
-              Дом
-            </button>
-            <button className={formType === "выезд" ? "active" : ""} onClick={() => setFormType("выезд")}>
-              Выезд
-            </button>
-          </div>
-
-          <button className="primary" onClick={addManualMatch}>
-            Добавить матч
-          </button>
 
           <h3>Добавленные матчи</h3>
           <table>
