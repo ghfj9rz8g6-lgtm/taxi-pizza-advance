@@ -107,6 +107,21 @@ function monthName(num, list = yearMonths) {
   return list.find((m) => m[0] === num)?.[1] || num;
 }
 
+function timeToMinutes(time) {
+  const match = String(time || "").match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function rangesOverlap(startA, endA, startB, endB) {
+  return startA < endB && endA > startB;
+}
+
 function normalizeDate(raw) {
   const text = String(raw || "").trim().toLowerCase().replace(/ё/g, "е");
   if (!text) return "";
@@ -232,8 +247,10 @@ function readGoogleCache() {
   try {
     const raw = localStorage.getItem(GOOGLE_CACHE_KEY);
     if (!raw) return null;
+
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed.matches)) return null;
+
     return parsed;
   } catch {
     return null;
@@ -280,6 +297,7 @@ function getWeeksForMonth2026(monthNum) {
         label: `${formatRuDate(toIsoDate(weekStart))}–${formatRuDate(toIsoDate(weekEnd))}`,
         days: Array.from({ length: 7 }, (_, i) => {
           const d = addDays(weekStart, i);
+
           return {
             iso: toIsoDate(d),
             label: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][i],
@@ -337,6 +355,11 @@ export default function App() {
 
   const dynWeeks = useMemo(() => getWeeksForMonth2026(dynMonth), [dynMonth]);
   const selectedWeek = dynWeeks.find((w) => w.startIso === dynWeekStart) || dynWeeks[0];
+
+  const trainingProblems = useMemo(() => {
+    if (dynEventType !== "training") return [];
+    return getTrainingProblems();
+  }, [dynEventType, trainingData, dynEvents, dynSelectedDate, dynYear, editingEventId]);
 
   useEffect(() => {
     loadAll();
@@ -676,6 +699,59 @@ export default function App() {
     return eventFor(dynYear, dynSelectedDate);
   }
 
+  function getTrainingProblems() {
+    const problems = [];
+    const currentItems = Object.entries(trainingData).map(([place, data]) => ({
+      place,
+      start: data.start || "",
+      end: data.end || "",
+    }));
+
+    for (const item of currentItems) {
+      if (!item.start || !item.end) continue;
+
+      const start = timeToMinutes(item.start);
+      const end = timeToMinutes(item.end);
+
+      if (start === null || end === null) continue;
+
+      if (end <= start) {
+        problems.push({
+          type: "invalid_time",
+          message: `${item.place}: окончание должно быть позже начала.`,
+        });
+        continue;
+      }
+
+      const sameDateEvents = dynEvents.filter((event) => {
+        if (event.event_date !== dynSelectedDate) return false;
+        if (event.event_type !== "training") return false;
+        if (editingEventId && event.id === editingEventId) return false;
+        return true;
+      });
+
+      for (const event of sameDateEvents) {
+        for (const existingItem of event.training_items || []) {
+          if (existingItem.place !== item.place) continue;
+
+          const existingStart = timeToMinutes(existingItem.start);
+          const existingEnd = timeToMinutes(existingItem.end);
+
+          if (existingStart === null || existingEnd === null) continue;
+
+          if (rangesOverlap(start, end, existingStart, existingEnd)) {
+            problems.push({
+              type: "conflict",
+              message: `${item.place} уже занято командой ${event.team_year} с ${existingItem.start} до ${existingItem.end}.`,
+            });
+          }
+        }
+      }
+    }
+
+    return problems;
+  }
+
   function toggleTrainingPlace(place) {
     setTrainingData((prev) => {
       const exists = !!prev[place];
@@ -829,6 +905,13 @@ export default function App() {
 
       if (hasEmptyTime) {
         setError("Укажи время начала и окончания для каждой выбранной тренировки.");
+        return;
+      }
+
+      const problems = getTrainingProblems();
+
+      if (problems.length) {
+        setError(problems[0].message);
         return;
       }
 
@@ -1423,6 +1506,14 @@ export default function App() {
                         </button>
                       ))}
                     </div>
+
+                    {trainingProblems.length > 0 && (
+                      <div className="notice">
+                        {trainingProblems.map((problem, index) => (
+                          <div key={index}>{problem.message}</div>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="training-items-list">
                       {Object.entries(trainingData).map(([place, data]) => (
