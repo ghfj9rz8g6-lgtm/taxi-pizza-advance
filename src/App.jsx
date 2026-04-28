@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import "./style.css";
 
@@ -9,7 +9,22 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const SHEET_ID = "1GwTd-C6ryVqNtYZvLaZygCe3Sv8SyumRKba4c7kBCcM";
 const SHEET_NAME = "Лист1";
 
-const months = [
+const advanceMonths = [
+  ["03", "Март"],
+  ["04", "Апрель"],
+  ["05", "Май"],
+  ["06", "Июнь"],
+  ["07", "Июль"],
+  ["08", "Август"],
+  ["09", "Сентябрь"],
+  ["10", "Октябрь"],
+  ["11", "Ноябрь"],
+  ["12", "Декабрь"],
+];
+
+const yearMonths = [
+  ["01", "Январь"],
+  ["02", "Февраль"],
   ["03", "Март"],
   ["04", "Апрель"],
   ["05", "Май"],
@@ -41,6 +56,10 @@ const allTeams = [
   "Академия Динамовец",
 ];
 
+const dynamovetsYears = [2017, 2016, 2015, 2014, 2013, 2012, 2011, 2010, 2009];
+const trainingPlaces = ["Поле №1", "Поле №2", "Поле №3", "Зал"];
+const homeMatchPlaces = ["Родина №1", "Родина №2"];
+
 function money(n) {
   return Number(n || 0).toLocaleString("ru-RU") + " ₽";
 }
@@ -50,8 +69,32 @@ function intValue(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function monthName(num) {
-  return months.find((m) => m[0] === num)?.[1] || num;
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toIsoDate(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function fromIsoDate(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function addDays(date, count) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + count);
+  return d;
+}
+
+function formatRuDate(iso) {
+  const d = fromIsoDate(iso);
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+}
+
+function monthName(num, list = yearMonths) {
+  return list.find((m) => m[0] === num)?.[1] || num;
 }
 
 function normalizeDate(raw) {
@@ -62,6 +105,10 @@ function normalizeDate(raw) {
   if (m) return `${m[1].padStart(2, "0")}.${m[2].padStart(2, "0")}`;
 
   const monthMap = {
+    января: "01",
+    январь: "01",
+    февраля: "02",
+    февраль: "02",
     марта: "03",
     март: "03",
     апреля: "04",
@@ -146,8 +193,55 @@ function loadGoogleSheetJsonp() {
   });
 }
 
+function getWeeksForMonth2026(monthNum) {
+  const year = 2026;
+  const monthIndex = Number(monthNum) - 1;
+
+  const first = new Date(year, monthIndex, 1);
+  const last = new Date(year, monthIndex + 1, 0);
+
+  const start = new Date(first);
+  const day = start.getDay() || 7;
+  start.setDate(start.getDate() - (day - 1));
+
+  const weeks = [];
+  let cur = new Date(start);
+
+  while (cur <= last || cur.getMonth() === monthIndex) {
+    const weekStart = new Date(cur);
+    const weekEnd = addDays(weekStart, 6);
+
+    const intersects =
+      (weekStart <= last && weekEnd >= first) ||
+      weekStart.getMonth() === monthIndex ||
+      weekEnd.getMonth() === monthIndex;
+
+    if (intersects) {
+      weeks.push({
+        startIso: toIsoDate(weekStart),
+        endIso: toIsoDate(weekEnd),
+        label: `${formatRuDate(toIsoDate(weekStart))}–${formatRuDate(toIsoDate(weekEnd))}`,
+        days: Array.from({ length: 7 }, (_, i) => {
+          const d = addDays(weekStart, i);
+          return {
+            iso: toIsoDate(d),
+            label: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][i],
+            date: `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`,
+          };
+        }),
+      });
+    }
+
+    cur = addDays(cur, 7);
+    if (weeks.length > 6) break;
+  }
+
+  return weeks;
+}
+
 export default function App() {
   const [page, setPage] = useState("calc");
+
   const [month, setMonth] = useState("03");
   const [googleMatches, setGoogleMatches] = useState([]);
   const [manualMatches, setManualMatches] = useState([]);
@@ -162,9 +256,40 @@ export default function App() {
   const [formOpponent, setFormOpponent] = useState("");
   const [formType, setFormType] = useState("дом");
 
+  const [dynTab, setDynTab] = useState("schedule");
+  const [dynMonth, setDynMonth] = useState("01");
+  const [dynWeekStart, setDynWeekStart] = useState("");
+  const [dynSelectedDate, setDynSelectedDate] = useState("");
+  const [dynEvents, setDynEvents] = useState([]);
+  const [dynTrainers, setDynTrainers] = useState([]);
+
+  const [dynYear, setDynYear] = useState(2017);
+  const [dynEventType, setDynEventType] = useState("training");
+  const [editingEventId, setEditingEventId] = useState(null);
+
+  const [trainingData, setTrainingData] = useState({});
+  const [matchHomeAway, setMatchHomeAway] = useState("home");
+  const [matchTime, setMatchTime] = useState("");
+  const [matchTournament, setMatchTournament] = useState("");
+  const [matchOpponent, setMatchOpponent] = useState("");
+  const [matchPlace, setMatchPlace] = useState("Родина №1");
+
+  const scheduleRef = useRef(null);
+
+  const dynWeeks = useMemo(() => getWeeksForMonth2026(dynMonth), [dynMonth]);
+  const selectedWeek = dynWeeks.find((w) => w.startIso === dynWeekStart) || dynWeeks[0];
+
   useEffect(() => {
     loadAll();
+    loadDynamovetsData();
   }, []);
+
+  useEffect(() => {
+    if (!dynWeekStart && dynWeeks.length) {
+      setDynWeekStart(dynWeeks[0].startIso);
+      setDynSelectedDate(dynWeeks[0].days[0].iso);
+    }
+  }, [dynWeeks, dynWeekStart]);
 
   async function loadAll() {
     await Promise.all([loadTariffs(), loadManualMatches(), loadGoogleMatches()]);
@@ -228,6 +353,31 @@ export default function App() {
     } catch (e) {
       setStatus("Google-таблица: ошибка");
       setError("Не удалось загрузить Google-таблицу: " + e.message);
+    }
+  }
+
+  async function loadDynamovetsData() {
+    const trainersResult = await supabase
+      .from("dynamovets_trainers")
+      .select("*")
+      .order("team_year", { ascending: false });
+
+    if (trainersResult.error) {
+      setError("Ошибка загрузки тренеров Динамовца: " + trainersResult.error.message);
+    } else {
+      setDynTrainers(trainersResult.data || []);
+    }
+
+    const eventsResult = await supabase
+      .from("dynamovets_schedule_events")
+      .select("*")
+      .order("event_date")
+      .order("team_year", { ascending: false });
+
+    if (eventsResult.error) {
+      setError("Ошибка загрузки расписания Динамовца: " + eventsResult.error.message);
+    } else {
+      setDynEvents(eventsResult.data || []);
     }
   }
 
@@ -346,9 +496,7 @@ export default function App() {
 
       if (exists) {
         return prev.map((t) =>
-          t.team === team && t.match_type === type
-            ? { ...t, [field]: intValue(value) }
-            : t
+          t.team === team && t.match_type === type ? { ...t, [field]: intValue(value) } : t
         );
       }
 
@@ -396,7 +544,7 @@ export default function App() {
     const html = `
       <html>
         <head>
-          <title>Аванс_${monthName(month)}_2026</title>
+          <title>Аванс_${monthName(month, advanceMonths)}_2026</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 20px; }
             table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -440,9 +588,7 @@ export default function App() {
               </tr>
             </tbody>
           </table>
-          <script>
-            window.onload = () => window.print();
-          </script>
+          <script>window.onload = () => window.print();</script>
         </body>
       </html>
     `;
@@ -452,12 +598,298 @@ export default function App() {
     w.document.close();
   }
 
+  function trainerName(year) {
+    return dynTrainers.find((t) => Number(t.team_year) === Number(year))?.trainer_name || "";
+  }
+
+  function eventFor(year, isoDate) {
+    return dynEvents.find(
+      (e) => Number(e.team_year) === Number(year) && e.event_date === isoDate
+    );
+  }
+
+  function existingSelectedEvent() {
+    return eventFor(dynYear, dynSelectedDate);
+  }
+
+  function toggleTrainingPlace(place) {
+    setTrainingData((prev) => {
+      const exists = !!prev[place];
+      const next = { ...prev };
+
+      if (exists) {
+        delete next[place];
+      } else {
+        next[place] = {
+          start: "",
+          end: "",
+          field_size: place === "Зал" ? "" : "Полное поле",
+        };
+      }
+
+      return next;
+    });
+  }
+
+  function updateTrainingPlace(place, field, value) {
+    setTrainingData((prev) => ({
+      ...prev,
+      [place]: {
+        ...(prev[place] || {}),
+        [field]: value,
+      },
+    }));
+  }
+
+  function resetDynForm() {
+    setEditingEventId(null);
+    setDynEventType("training");
+    setTrainingData({});
+    setMatchHomeAway("home");
+    setMatchTime("");
+    setMatchTournament("");
+    setMatchOpponent("");
+    setMatchPlace("Родина №1");
+  }
+
+  function startEditEvent(event) {
+    setEditingEventId(event.id);
+    setDynYear(Number(event.team_year));
+    setDynSelectedDate(event.event_date);
+    setDynEventType(event.event_type);
+
+    if (event.event_type === "training") {
+      const next = {};
+      (event.training_items || []).forEach((item) => {
+        next[item.place] = {
+          start: item.start || "",
+          end: item.end || "",
+          field_size: item.field_size || "",
+        };
+      });
+      setTrainingData(next);
+    } else {
+      setTrainingData({});
+    }
+
+    if (event.event_type === "match") {
+      setMatchHomeAway(event.match_home_away || "home");
+      setMatchTime(event.match_time || "");
+      setMatchTournament(event.tournament || "");
+      setMatchOpponent(event.opponent || "");
+      setMatchPlace(event.match_place || "Родина №1");
+    } else {
+      setMatchHomeAway("home");
+      setMatchTime("");
+      setMatchTournament("");
+      setMatchOpponent("");
+      setMatchPlace("Родина №1");
+    }
+  }
+
+  async function saveDynEvent() {
+    setError("");
+
+    if (!dynSelectedDate) {
+      setError("Выбери день.");
+      return;
+    }
+
+    const exists = existingSelectedEvent();
+
+    if (exists && !editingEventId) {
+      setError("На эту дату у этой команды уже есть событие. Нажми «Изменить существующее».");
+      return;
+    }
+
+    let payload = {
+      team_year: dynYear,
+      event_date: dynSelectedDate,
+      event_type: dynEventType,
+      training_items: [],
+      match_home_away: null,
+      match_time: null,
+      tournament: null,
+      opponent: null,
+      match_place: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (dynEventType === "training") {
+      const items = Object.entries(trainingData).map(([place, data]) => ({
+        place,
+        start: data.start || "",
+        end: data.end || "",
+        field_size: place === "Зал" ? "" : data.field_size || "Полное поле",
+      }));
+
+      if (!items.length) {
+        setError("Выбери хотя бы одно место тренировки.");
+        return;
+      }
+
+      payload.training_items = items;
+    }
+
+    if (dynEventType === "match") {
+      if (!matchTime || !matchTournament.trim() || !matchOpponent.trim() || !matchPlace.trim()) {
+        setError("Заполни время, турнир, соперника и место матча.");
+        return;
+      }
+
+      payload.match_home_away = matchHomeAway;
+      payload.match_time = matchTime;
+      payload.tournament = matchTournament.trim();
+      payload.opponent = matchOpponent.trim();
+      payload.match_place = matchPlace.trim();
+    }
+
+    let result;
+
+    if (editingEventId) {
+      result = await supabase
+        .from("dynamovets_schedule_events")
+        .update(payload)
+        .eq("id", editingEventId);
+    } else {
+      result = await supabase.from("dynamovets_schedule_events").insert(payload);
+    }
+
+    if (result.error) {
+      setError("Ошибка сохранения события: " + result.error.message);
+      return;
+    }
+
+    resetDynForm();
+    await loadDynamovetsData();
+  }
+
+  async function deleteDynEvent(id) {
+    const ok = window.confirm("Удалить событие?");
+    if (!ok) return;
+
+    const { error } = await supabase.from("dynamovets_schedule_events").delete().eq("id", id);
+
+    if (error) {
+      setError("Ошибка удаления события: " + error.message);
+      return;
+    }
+
+    if (editingEventId === id) resetDynForm();
+    await loadDynamovetsData();
+  }
+
+  function updateTrainerLocal(year, value) {
+    setDynTrainers((prev) => {
+      const exists = prev.find((t) => Number(t.team_year) === Number(year));
+
+      if (exists) {
+        return prev.map((t) =>
+          Number(t.team_year) === Number(year) ? { ...t, trainer_name: value } : t
+        );
+      }
+
+      return [...prev, { team_year: year, trainer_name: value }];
+    });
+  }
+
+  async function saveTrainers() {
+    const payload = dynamovetsYears.map((year) => ({
+      team_year: year,
+      trainer_name: trainerName(year),
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase.from("dynamovets_trainers").upsert(payload, {
+      onConflict: "team_year",
+    });
+
+    if (error) {
+      setError("Ошибка сохранения тренеров: " + error.message);
+      return;
+    }
+
+    alert("Тренеры сохранены");
+    await loadDynamovetsData();
+  }
+
+  async function downloadSchedulePng() {
+    const node = scheduleRef.current;
+    if (!node) return;
+
+    try {
+      const clone = node.cloneNode(true);
+      clone.style.background = "white";
+
+      let css = "";
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          css += Array.from(sheet.cssRules)
+            .map((rule) => rule.cssText)
+            .join("\n");
+        } catch {
+          // пропускаем внешние стили, если браузер не даёт их читать
+        }
+      }
+
+      const html = `
+        <html xmlns="http://www.w3.org/1999/xhtml">
+          <head>
+            <style>
+              body { margin: 0; background: white; }
+              ${css}
+            </style>
+          </head>
+          <body>${clone.outerHTML}</body>
+        </html>
+      `;
+
+      const width = Math.max(node.scrollWidth, 1200);
+      const height = Math.max(node.scrollHeight, 500);
+
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+          <foreignObject width="100%" height="100%">
+            ${html}
+          </foreignObject>
+        </svg>
+      `;
+
+      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width * 2;
+        canvas.height = height * 2;
+
+        const ctx = canvas.getContext("2d");
+        ctx.scale(2, 2);
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0);
+
+        URL.revokeObjectURL(url);
+
+        const a = document.createElement("a");
+        a.download = `Динамовец_${selectedWeek?.label || "расписание"}_2026.png`;
+        a.href = canvas.toDataURL("image/png");
+        a.click();
+      };
+
+      img.src = url;
+    } catch (e) {
+      setError("Не удалось скачать PNG: " + e.message);
+    }
+  }
+
   return (
     <div className="app">
       <header>
         <div>
           <h1>Расчёт аванса</h1>
-          <p>Такси и пицца по матчам команд</p>
+          <p>Такси, пицца и расписание академий</p>
         </div>
         <div className="status">{status}</div>
       </header>
@@ -472,6 +904,9 @@ export default function App() {
         <button className={page === "tariffs" ? "active" : ""} onClick={() => setPage("tariffs")}>
           Тарифы
         </button>
+        <button className={page === "dynamovets" ? "active" : ""} onClick={() => setPage("dynamovets")}>
+          Расписание Динамовец
+        </button>
       </nav>
 
       {error && <div className="error">{error}</div>}
@@ -481,7 +916,7 @@ export default function App() {
           <section className="card">
             <h2>Месяц</h2>
             <div className="buttons">
-              {months.map(([num, name]) => (
+              {advanceMonths.map(([num, name]) => (
                 <button
                   key={num}
                   className={month === num ? "active" : ""}
@@ -516,16 +951,10 @@ export default function App() {
                       </span>
                     </div>
                     <div>{m.opponent}</div>
-                    <button
-                      className={s.taxi ? "service on" : "service"}
-                      onClick={() => toggle(m.id, "taxi")}
-                    >
+                    <button className={s.taxi ? "service on" : "service"} onClick={() => toggle(m.id, "taxi")}>
                       Такси
                     </button>
-                    <button
-                      className={s.pizza ? "service on" : "service"}
-                      onClick={() => toggle(m.id, "pizza")}
-                    >
+                    <button className={s.pizza ? "service on" : "service"} onClick={() => toggle(m.id, "pizza")}>
                       Пицца
                     </button>
                   </div>
@@ -554,11 +983,7 @@ export default function App() {
               <label>Команда</label>
               <div className="buttons">
                 {manualTeams.map((t) => (
-                  <button
-                    key={t}
-                    className={formTeam === t ? "active" : ""}
-                    onClick={() => setFormTeam(t)}
-                  >
+                  <button key={t} className={formTeam === t ? "active" : ""} onClick={() => setFormTeam(t)}>
                     {t}
                   </button>
                 ))}
@@ -568,12 +993,8 @@ export default function App() {
             <div className="form-group">
               <label>Месяц</label>
               <div className="buttons">
-                {months.map(([num, name]) => (
-                  <button
-                    key={num}
-                    className={formMonth === num ? "active" : ""}
-                    onClick={() => setFormMonth(num)}
-                  >
+                {advanceMonths.map(([num, name]) => (
+                  <button key={num} className={formMonth === num ? "active" : ""} onClick={() => setFormMonth(num)}>
                     {name}
                   </button>
                 ))}
@@ -587,11 +1008,7 @@ export default function App() {
 
             <div className="form-group">
               <label>Соперник</label>
-              <input
-                value={formOpponent}
-                onChange={(e) => setFormOpponent(e.target.value)}
-                placeholder="Спартак"
-              />
+              <input value={formOpponent} onChange={(e) => setFormOpponent(e.target.value)} placeholder="Спартак" />
             </div>
 
             <div className="form-group">
@@ -600,10 +1017,7 @@ export default function App() {
                 <button className={formType === "дом" ? "active" : ""} onClick={() => setFormType("дом")}>
                   Дом
                 </button>
-                <button
-                  className={formType === "выезд" ? "active" : ""}
-                  onClick={() => setFormType("выезд")}
-                >
+                <button className={formType === "выезд" ? "active" : ""} onClick={() => setFormType("выезд")}>
                   Выезд
                 </button>
               </div>
@@ -701,8 +1115,351 @@ export default function App() {
           </button>
         </section>
       )}
+
+      {page === "dynamovets" && (
+        <>
+          <section className="card">
+            <h2>Расписание Динамовец</h2>
+            <div className="buttons">
+              <button className={dynTab === "schedule" ? "active" : ""} onClick={() => setDynTab("schedule")}>
+                Расписание
+              </button>
+              <button className={dynTab === "trainers" ? "active" : ""} onClick={() => setDynTab("trainers")}>
+                Тренеры
+              </button>
+            </div>
+          </section>
+
+          {dynTab === "trainers" && (
+            <section className="card">
+              <h2>Тренеры Динамовца</h2>
+
+              <div className="trainer-grid">
+                {dynamovetsYears.map((year) => (
+                  <div className="trainer-row" key={year}>
+                    <b>{year}</b>
+                    <input
+                      value={trainerName(year)}
+                      onChange={(e) => updateTrainerLocal(year, e.target.value)}
+                      placeholder="Имя Фамилия"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <button className="primary" onClick={saveTrainers}>
+                Сохранить тренеров
+              </button>
+            </section>
+          )}
+
+          {dynTab === "schedule" && (
+            <>
+              <section className="card">
+                <h2>Выбор периода</h2>
+
+                <label>Месяц 2026</label>
+                <div className="buttons">
+                  {yearMonths.map(([num, name]) => (
+                    <button
+                      key={num}
+                      className={dynMonth === num ? "active" : ""}
+                      onClick={() => {
+                        const weeks = getWeeksForMonth2026(num);
+                        setDynMonth(num);
+                        setDynWeekStart(weeks[0]?.startIso || "");
+                        setDynSelectedDate(weeks[0]?.days[0]?.iso || "");
+                      }}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+
+                <label>Неделя</label>
+                <div className="buttons">
+                  {dynWeeks.map((w) => (
+                    <button
+                      key={w.startIso}
+                      className={dynWeekStart === w.startIso ? "active" : ""}
+                      onClick={() => {
+                        setDynWeekStart(w.startIso);
+                        setDynSelectedDate(w.days[0].iso);
+                      }}
+                    >
+                      {w.label}
+                    </button>
+                  ))}
+                </div>
+
+                <label>День</label>
+                <div className="buttons">
+                  {(selectedWeek?.days || []).map((d) => (
+                    <button
+                      key={d.iso}
+                      className={dynSelectedDate === d.iso ? "active" : ""}
+                      onClick={() => setDynSelectedDate(d.iso)}
+                    >
+                      {d.label} {d.date}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="card">
+                <h2>{editingEventId ? "Изменить событие" : "Добавить событие"}</h2>
+
+                <div className="form-group">
+                  <label>Команда / год</label>
+                  <div className="buttons">
+                    {dynamovetsYears.map((year) => (
+                      <button key={year} className={dynYear === year ? "active" : ""} onClick={() => setDynYear(year)}>
+                        {year}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {existingSelectedEvent() && !editingEventId && (
+                  <div className="notice">
+                    На эту дату у {dynYear} уже есть событие. Можно изменить существующее или удалить его.
+                    <div className="notice-actions">
+                      <button className="primary" onClick={() => startEditEvent(existingSelectedEvent())}>
+                        Изменить существующее
+                      </button>
+                      <button className="danger" onClick={() => deleteDynEvent(existingSelectedEvent().id)}>
+                        Удалить
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label>Тип события</label>
+                  <div className="buttons">
+                    <button className={dynEventType === "training" ? "active" : ""} onClick={() => setDynEventType("training")}>
+                      Тренировка
+                    </button>
+                    <button className={dynEventType === "match" ? "active" : ""} onClick={() => setDynEventType("match")}>
+                      Матч
+                    </button>
+                    <button className={dynEventType === "day_off" ? "active" : ""} onClick={() => setDynEventType("day_off")}>
+                      Выходной
+                    </button>
+                  </div>
+                </div>
+
+                {dynEventType === "training" && (
+                  <div className="form-group">
+                    <label>Место тренировки</label>
+                    <div className="buttons">
+                      {trainingPlaces.map((place) => (
+                        <button
+                          key={place}
+                          className={trainingData[place] ? "active" : ""}
+                          onClick={() => toggleTrainingPlace(place)}
+                        >
+                          {place}
+                        </button>
+                      ))}
+                    </div>
+
+                    {Object.entries(trainingData).map(([place, data]) => (
+                      <div className="training-item-form" key={place}>
+                        <b>{place}</b>
+                        <input
+                          type="time"
+                          value={data.start || ""}
+                          onChange={(e) => updateTrainingPlace(place, "start", e.target.value)}
+                        />
+                        <input
+                          type="time"
+                          value={data.end || ""}
+                          onChange={(e) => updateTrainingPlace(place, "end", e.target.value)}
+                        />
+
+                        {place !== "Зал" && (
+                          <div className="buttons">
+                            <button
+                              className={data.field_size === "Полное поле" ? "active" : ""}
+                              onClick={() => updateTrainingPlace(place, "field_size", "Полное поле")}
+                            >
+                              Полное поле
+                            </button>
+                            <button
+                              className={data.field_size === "1/2 поля" ? "active" : ""}
+                              onClick={() => updateTrainingPlace(place, "field_size", "1/2 поля")}
+                            >
+                              1/2 поля
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {dynEventType === "match" && (
+                  <div className="match-form">
+                    <label>Дом / выезд</label>
+                    <div className="buttons">
+                      <button
+                        className={matchHomeAway === "home" ? "active" : ""}
+                        onClick={() => {
+                          setMatchHomeAway("home");
+                          setMatchPlace("Родина №1");
+                        }}
+                      >
+                        Дом
+                      </button>
+                      <button
+                        className={matchHomeAway === "away" ? "active" : ""}
+                        onClick={() => {
+                          setMatchHomeAway("away");
+                          setMatchPlace("");
+                        }}
+                      >
+                        Выезд
+                      </button>
+                    </div>
+
+                    <label>Время матча</label>
+                    <input type="time" value={matchTime} onChange={(e) => setMatchTime(e.target.value)} />
+
+                    <label>Турнир</label>
+                    <input value={matchTournament} onChange={(e) => setMatchTournament(e.target.value)} placeholder="ЛПМ" />
+
+                    <label>Соперник</label>
+                    <input value={matchOpponent} onChange={(e) => setMatchOpponent(e.target.value)} placeholder="Космос" />
+
+                    <label>Поле / стадион</label>
+                    {matchHomeAway === "home" ? (
+                      <div className="buttons">
+                        {homeMatchPlaces.map((place) => (
+                          <button key={place} className={matchPlace === place ? "active" : ""} onClick={() => setMatchPlace(place)}>
+                            {place}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <input value={matchPlace} onChange={(e) => setMatchPlace(e.target.value)} placeholder="Стадион / поле" />
+                    )}
+                  </div>
+                )}
+
+                <div className="manual-actions">
+                  <button className="primary add-match-button" onClick={saveDynEvent}>
+                    {editingEventId ? "Сохранить изменения" : "Сохранить событие"}
+                  </button>
+                  {editingEventId && (
+                    <button className="secondary" onClick={resetDynForm}>
+                      Отмена редактирования
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              <section className="card">
+                <div className="schedule-toolbar">
+                  <h2>Таблица расписания</h2>
+                  <button className="primary" onClick={downloadSchedulePng}>
+                    Скачать PNG
+                  </button>
+                </div>
+
+                <div className="schedule-wrap" ref={scheduleRef}>
+                  <table className="schedule-table">
+                    <thead>
+                      <tr>
+                        <th>Год</th>
+                        <th>Тренер</th>
+                        {(selectedWeek?.days || []).map((d) => (
+                          <th key={d.iso}>
+                            {d.label}
+                            <br />
+                            {d.date}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dynamovetsYears.map((year) => (
+                        <tr key={year}>
+                          <td className="year-cell">{year}</td>
+                          <td className="trainer-cell">{trainerName(year)}</td>
+                          {(selectedWeek?.days || []).map((d) => {
+                            const ev = eventFor(year, d.iso);
+                            return (
+                              <td key={d.iso} className="schedule-cell">
+                                <ScheduleEventView event={ev} />
+                                {ev && (
+                                  <div className="cell-actions">
+                                    <button onClick={() => startEditEvent(ev)}>Изм.</button>
+                                    <button className="danger" onClick={() => deleteDynEvent(ev.id)}>
+                                      Уд.
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
+}
+
+function ScheduleEventView({ event }) {
+  if (!event) return null;
+
+  if (event.event_type === "day_off") {
+    return <div className="day-off">Выходной</div>;
+  }
+
+  if (event.event_type === "training") {
+    return (
+      <div className="event-block training-block">
+        {(event.training_items || []).map((item, index) => (
+          <div key={index} className="training-line">
+            <b>
+              {item.start || "—"}–{item.end || "—"}
+            </b>
+            <span>Тренировка</span>
+            <span>
+              {item.place}
+              {item.field_size ? ` · ${item.field_size}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (event.event_type === "match") {
+    const pair =
+      event.match_home_away === "away"
+        ? `${event.opponent} — Динамовец`
+        : `Динамовец — ${event.opponent}`;
+
+    return (
+      <div className="event-block match-block">
+        <b className="match-time">{event.match_time}</b>
+        <span>{event.tournament}</span>
+        <span>{pair}</span>
+        <span>{event.match_place}</span>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function TariffInput({ label, value, onChange }) {
