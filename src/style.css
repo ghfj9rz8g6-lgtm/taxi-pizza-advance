@@ -8,7 +8,7 @@
   --active: #16a34a;
   --danger: #dc2626;
   --soft: #eff6ff;
-  --shadow: 0 10px 30px rgba(15, 23, 42, .08);
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
 * {
@@ -62,7 +62,8 @@ nav,
 .buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
+  align-items: center;
 }
 
 nav {
@@ -72,12 +73,14 @@ nav {
 button {
   border: 0;
   cursor: pointer;
-  border-radius: 14px;
-  padding: 11px 16px;
-  font-size: 14px;
-  font-weight: 700;
+  border-radius: 16px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 800;
   background: #e5e7eb;
   color: var(--text);
+  line-height: 1.15;
+  transition: 0.12s ease;
 }
 
 button:hover {
@@ -88,13 +91,13 @@ button.active,
 button.primary {
   background: var(--accent);
   color: white;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, .22);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
 }
 
 button.service.on {
   background: var(--active);
   color: white;
-  box-shadow: 0 8px 18px rgba(22, 163, 74, .22);
+  box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22);
 }
 
 button.secondary {
@@ -171,8 +174,8 @@ button.danger {
 label {
   display: block;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
   margin: 18px 0 8px;
 }
 
@@ -188,7 +191,7 @@ input {
 
 input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, .1);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
 }
 
 .card > .buttons {
@@ -201,6 +204,19 @@ input:focus {
   margin-top: 18px;
   margin-bottom: 30px;
 }
+
+.manual-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.add-match-button {
+  min-width: 210px;
+}
+
+/* ===== Таблицы ===== */
 
 table {
   width: 100%;
@@ -224,7 +240,7 @@ th {
   color: #374151;
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
 }
 
 tr:last-child td {
@@ -239,6 +255,8 @@ tr:last-child td {
   font-weight: 900;
   color: #166534;
 }
+
+/* ===== Тарифы ===== */
 
 .tariff {
   display: grid;
@@ -255,6 +273,270 @@ tr:last-child td {
 .tariff b {
   padding-bottom: 13px;
 }
+
+/* ===== Динамовец: форма ===== */
+
+.place-buttons {
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.place-buttons button {
+  min-width: 135px;
+  min-height: 58px;
+  font-size: 18px;
+  border-radius: 18px;
+}
+
+.training-items-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.training-item-form {
+  display: grid;
+  grid-template-columns: 150px minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 14px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  background: #f9fafb;
+}
+
+.training-place-title {
+  font-size: 20px;
+  font-weight: 900;
+  padding-top: 35px;
+}
+
+.field-size-buttons {
+  grid-column: 2 / 4;
+  margin-top: 4px;
+}
+
+.field-size-buttons button {
+  min-width: 150px;
+}
+
+/* ===== Красивый выбор времени ===== */
+
+.time-picker {
+  position: relative;
+}
+
+.time-picker label {
+  margin-top: 0;
+}
+
+.time-main {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 16px;
+  background: white;
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+  padding: 13px 16px;
+  font-size: 16px;
+  box-shadow: none;
+}
+
+.time-main.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+}
+
+.time-options {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+
+.time-options button {
+  border-radius: 12px;
+  padding: 10px 8px;
+  font-size: 14px;
+  background: #eef2f7;
+  color: var(--text);
+}
+
+.time-options button.active {
+  background: var(--accent);
+  color: white;
+}
+
+/* ===== Форма матча ===== */
+
+.match-form {
+  display: grid;
+  gap: 8px;
+}
+
+.match-form input {
+  margin-bottom: 6px;
+}
+
+/* ===== Уведомления ===== */
+
+.notice {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 16px;
+  padding: 14px;
+  margin: 16px 0;
+  font-weight: 700;
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* ===== Таблица расписания ===== */
+
+.schedule-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.schedule-toolbar h2 {
+  margin-bottom: 0;
+}
+
+.schedule-wrap {
+  width: 100%;
+  overflow-x: auto;
+  background: white;
+  border-radius: 16px;
+}
+
+.schedule-table {
+  min-width: 1180px;
+  border-collapse: collapse;
+  margin-top: 0;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #222;
+  text-align: center;
+  vertical-align: middle;
+  padding: 10px;
+}
+
+.schedule-table th {
+  background: #e7e1d0;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.year-cell {
+  width: 70px;
+  font-weight: 900;
+}
+
+.trainer-cell {
+  width: 130px;
+  font-weight: 800;
+}
+
+.schedule-cell {
+  width: 140px;
+  min-height: 80px;
+  font-size: 12px;
+  position: relative;
+}
+
+.event-block {
+  display: grid;
+  gap: 3px;
+  line-height: 1.25;
+}
+
+.training-block {
+  color: #111827;
+}
+
+.training-line {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.training-line b {
+  font-size: 12px;
+}
+
+.match-block {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+.match-time {
+  color: #dc2626;
+}
+
+.day-off {
+  color: #111827;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.cell-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.cell-actions button {
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+/* ===== Тренеры ===== */
+
+.trainer-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.trainer-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.trainer-row b {
+  font-size: 18px;
+}
+
+/* ===== Мобильная адаптация ===== */
 
 @media (max-width: 850px) {
   .app {
@@ -287,5 +569,37 @@ tr:last-child td {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+  }
+
+  .training-item-form {
+    grid-template-columns: 1fr;
+  }
+
+  .training-place-title {
+    padding-top: 0;
+  }
+
+  .field-size-buttons {
+    grid-column: auto;
+  }
+
+  .time-options {
+    position: static;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 8px;
+    max-height: 260px;
+  }
+
+  .schedule-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schedule-toolbar button {
+    width: 100%;
+  }
+
+  .trainer-row {
+    grid-template-columns: 1fr;
   }
 }
