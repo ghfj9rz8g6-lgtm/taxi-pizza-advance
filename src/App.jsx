@@ -57,8 +57,17 @@ const allTeams = [
 ];
 
 const dynamovetsYears = [2017, 2016, 2015, 2014, 2013, 2012, 2011, 2010, 2009];
+
+const fieldTrainingPlaces = ["Поле №1", "Поле №2", "Поле №3"];
 const trainingPlaces = ["Поле №1", "Поле №2", "Поле №3", "Зал"];
 const homeMatchPlaces = ["Родина №1", "Родина №2"];
+
+const timeOptions = Array.from({ length: 49 }, (_, index) => {
+  const totalMinutes = 9 * 60 + index * 15;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+});
 
 function money(n) {
   return Number(n || 0).toLocaleString("ru-RU") + " ₽";
@@ -223,6 +232,7 @@ function getWeeksForMonth2026(monthNum) {
         label: `${formatRuDate(toIsoDate(weekStart))}–${formatRuDate(toIsoDate(weekEnd))}`,
         days: Array.from({ length: 7 }, (_, i) => {
           const d = addDays(weekStart, i);
+
           return {
             iso: toIsoDate(d),
             label: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][i],
@@ -398,6 +408,7 @@ export default function App() {
     return [...google, ...manual].sort((a, b) => {
       const da = Number(a.date.slice(0, 2));
       const db = Number(b.date.slice(0, 2));
+
       if (da !== db) return da - db;
       return a.team.localeCompare(b.team, "ru");
     });
@@ -617,13 +628,29 @@ export default function App() {
       const exists = !!prev[place];
       const next = { ...prev };
 
-      if (exists) {
-        delete next[place];
-      } else {
+      if (place === "Зал") {
+        if (exists) {
+          delete next["Зал"];
+        } else {
+          next["Зал"] = {
+            start: "",
+            end: "",
+            field_size: "",
+          };
+        }
+
+        return next;
+      }
+
+      fieldTrainingPlaces.forEach((fieldPlace) => {
+        delete next[fieldPlace];
+      });
+
+      if (!exists) {
         next[place] = {
           start: "",
           end: "",
-          field_size: place === "Зал" ? "" : "Полное поле",
+          field_size: "Полное поле",
         };
       }
 
@@ -660,13 +687,21 @@ export default function App() {
 
     if (event.event_type === "training") {
       const next = {};
+      let fieldAlreadySelected = false;
+
       (event.training_items || []).forEach((item) => {
+        const isField = fieldTrainingPlaces.includes(item.place);
+
+        if (isField && fieldAlreadySelected) return;
+        if (isField) fieldAlreadySelected = true;
+
         next[item.place] = {
           start: item.start || "",
           end: item.end || "",
           field_size: item.field_size || "",
         };
       });
+
       setTrainingData(next);
     } else {
       setTrainingData({});
@@ -723,8 +758,22 @@ export default function App() {
         field_size: place === "Зал" ? "" : data.field_size || "Полное поле",
       }));
 
+      const fieldItems = items.filter((item) => fieldTrainingPlaces.includes(item.place));
+
+      if (fieldItems.length > 1) {
+        setError("Можно выбрать только одно поле. Зал можно добавить дополнительно.");
+        return;
+      }
+
       if (!items.length) {
         setError("Выбери хотя бы одно место тренировки.");
+        return;
+      }
+
+      const hasEmptyTime = items.some((item) => !item.start || !item.end);
+
+      if (hasEmptyTime) {
+        setError("Укажи время начала и окончания для каждой выбранной тренировки.");
         return;
       }
 
@@ -822,6 +871,7 @@ export default function App() {
       clone.style.background = "white";
 
       let css = "";
+
       for (const sheet of Array.from(document.styleSheets)) {
         try {
           css += Array.from(sheet.cssRules)
@@ -859,6 +909,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
 
       const img = new Image();
+
       img.onload = () => {
         const canvas = document.createElement("canvas");
         canvas.width = width * 2;
@@ -904,7 +955,10 @@ export default function App() {
         <button className={page === "tariffs" ? "active" : ""} onClick={() => setPage("tariffs")}>
           Тарифы
         </button>
-        <button className={page === "dynamovets" ? "active" : ""} onClick={() => setPage("dynamovets")}>
+        <button
+          className={page === "dynamovets" ? "active" : ""}
+          onClick={() => setPage("dynamovets")}
+        >
           Расписание Динамовец
         </button>
       </nav>
@@ -941,6 +995,7 @@ export default function App() {
 
               {currentMatches.map((m) => {
                 const s = selected[m.id] || {};
+
                 return (
                   <div className="match" key={m.id}>
                     <div>
@@ -951,10 +1006,16 @@ export default function App() {
                       </span>
                     </div>
                     <div>{m.opponent}</div>
-                    <button className={s.taxi ? "service on" : "service"} onClick={() => toggle(m.id, "taxi")}>
+                    <button
+                      className={s.taxi ? "service on" : "service"}
+                      onClick={() => toggle(m.id, "taxi")}
+                    >
                       Такси
                     </button>
-                    <button className={s.pizza ? "service on" : "service"} onClick={() => toggle(m.id, "pizza")}>
+                    <button
+                      className={s.pizza ? "service on" : "service"}
+                      onClick={() => toggle(m.id, "pizza")}
+                    >
                       Пицца
                     </button>
                   </div>
@@ -983,7 +1044,11 @@ export default function App() {
               <label>Команда</label>
               <div className="buttons">
                 {manualTeams.map((t) => (
-                  <button key={t} className={formTeam === t ? "active" : ""} onClick={() => setFormTeam(t)}>
+                  <button
+                    key={t}
+                    className={formTeam === t ? "active" : ""}
+                    onClick={() => setFormTeam(t)}
+                  >
                     {t}
                   </button>
                 ))}
@@ -994,7 +1059,11 @@ export default function App() {
               <label>Месяц</label>
               <div className="buttons">
                 {advanceMonths.map(([num, name]) => (
-                  <button key={num} className={formMonth === num ? "active" : ""} onClick={() => setFormMonth(num)}>
+                  <button
+                    key={num}
+                    className={formMonth === num ? "active" : ""}
+                    onClick={() => setFormMonth(num)}
+                  >
                     {name}
                   </button>
                 ))}
@@ -1008,16 +1077,26 @@ export default function App() {
 
             <div className="form-group">
               <label>Соперник</label>
-              <input value={formOpponent} onChange={(e) => setFormOpponent(e.target.value)} placeholder="Спартак" />
+              <input
+                value={formOpponent}
+                onChange={(e) => setFormOpponent(e.target.value)}
+                placeholder="Спартак"
+              />
             </div>
 
             <div className="form-group">
               <label>Тип матча</label>
               <div className="buttons">
-                <button className={formType === "дом" ? "active" : ""} onClick={() => setFormType("дом")}>
+                <button
+                  className={formType === "дом" ? "active" : ""}
+                  onClick={() => setFormType("дом")}
+                >
                   Дом
                 </button>
-                <button className={formType === "выезд" ? "active" : ""} onClick={() => setFormType("выезд")}>
+                <button
+                  className={formType === "выезд" ? "active" : ""}
+                  onClick={() => setFormType("выезд")}
+                >
                   Выезд
                 </button>
               </div>
@@ -1121,10 +1200,16 @@ export default function App() {
           <section className="card">
             <h2>Расписание Динамовец</h2>
             <div className="buttons">
-              <button className={dynTab === "schedule" ? "active" : ""} onClick={() => setDynTab("schedule")}>
+              <button
+                className={dynTab === "schedule" ? "active" : ""}
+                onClick={() => setDynTab("schedule")}
+              >
                 Расписание
               </button>
-              <button className={dynTab === "trainers" ? "active" : ""} onClick={() => setDynTab("trainers")}>
+              <button
+                className={dynTab === "trainers" ? "active" : ""}
+                onClick={() => setDynTab("trainers")}
+              >
                 Тренеры
               </button>
             </div>
@@ -1213,7 +1298,11 @@ export default function App() {
                   <label>Команда / год</label>
                   <div className="buttons">
                     {dynamovetsYears.map((year) => (
-                      <button key={year} className={dynYear === year ? "active" : ""} onClick={() => setDynYear(year)}>
+                      <button
+                        key={year}
+                        className={dynYear === year ? "active" : ""}
+                        onClick={() => setDynYear(year)}
+                      >
                         {year}
                       </button>
                     ))}
@@ -1222,12 +1311,19 @@ export default function App() {
 
                 {existingSelectedEvent() && !editingEventId && (
                   <div className="notice">
-                    На эту дату у {dynYear} уже есть событие. Можно изменить существующее или удалить его.
+                    На эту дату у {dynYear} уже есть событие. Можно изменить существующее или
+                    удалить его.
                     <div className="notice-actions">
-                      <button className="primary" onClick={() => startEditEvent(existingSelectedEvent())}>
+                      <button
+                        className="primary"
+                        onClick={() => startEditEvent(existingSelectedEvent())}
+                      >
                         Изменить существующее
                       </button>
-                      <button className="danger" onClick={() => deleteDynEvent(existingSelectedEvent().id)}>
+                      <button
+                        className="danger"
+                        onClick={() => deleteDynEvent(existingSelectedEvent().id)}
+                      >
                         Удалить
                       </button>
                     </div>
@@ -1237,13 +1333,22 @@ export default function App() {
                 <div className="form-group">
                   <label>Тип события</label>
                   <div className="buttons">
-                    <button className={dynEventType === "training" ? "active" : ""} onClick={() => setDynEventType("training")}>
+                    <button
+                      className={dynEventType === "training" ? "active" : ""}
+                      onClick={() => setDynEventType("training")}
+                    >
                       Тренировка
                     </button>
-                    <button className={dynEventType === "match" ? "active" : ""} onClick={() => setDynEventType("match")}>
+                    <button
+                      className={dynEventType === "match" ? "active" : ""}
+                      onClick={() => setDynEventType("match")}
+                    >
                       Матч
                     </button>
-                    <button className={dynEventType === "day_off" ? "active" : ""} onClick={() => setDynEventType("day_off")}>
+                    <button
+                      className={dynEventType === "day_off" ? "active" : ""}
+                      onClick={() => setDynEventType("day_off")}
+                    >
                       Выходной
                     </button>
                   </div>
@@ -1267,15 +1372,15 @@ export default function App() {
                     {Object.entries(trainingData).map(([place, data]) => (
                       <div className="training-item-form" key={place}>
                         <b>{place}</b>
-                        <input
-                          type="time"
+
+                        <TimeSelect
                           value={data.start || ""}
-                          onChange={(e) => updateTrainingPlace(place, "start", e.target.value)}
+                          onChange={(value) => updateTrainingPlace(place, "start", value)}
                         />
-                        <input
-                          type="time"
+
+                        <TimeSelect
                           value={data.end || ""}
-                          onChange={(e) => updateTrainingPlace(place, "end", e.target.value)}
+                          onChange={(value) => updateTrainingPlace(place, "end", value)}
                         />
 
                         {place !== "Зал" && (
@@ -1324,25 +1429,41 @@ export default function App() {
                     </div>
 
                     <label>Время матча</label>
-                    <input type="time" value={matchTime} onChange={(e) => setMatchTime(e.target.value)} />
+                    <TimeSelect value={matchTime} onChange={setMatchTime} />
 
                     <label>Турнир</label>
-                    <input value={matchTournament} onChange={(e) => setMatchTournament(e.target.value)} placeholder="ЛПМ" />
+                    <input
+                      value={matchTournament}
+                      onChange={(e) => setMatchTournament(e.target.value)}
+                      placeholder="ЛПМ"
+                    />
 
                     <label>Соперник</label>
-                    <input value={matchOpponent} onChange={(e) => setMatchOpponent(e.target.value)} placeholder="Космос" />
+                    <input
+                      value={matchOpponent}
+                      onChange={(e) => setMatchOpponent(e.target.value)}
+                      placeholder="Космос"
+                    />
 
                     <label>Поле / стадион</label>
                     {matchHomeAway === "home" ? (
                       <div className="buttons">
                         {homeMatchPlaces.map((place) => (
-                          <button key={place} className={matchPlace === place ? "active" : ""} onClick={() => setMatchPlace(place)}>
+                          <button
+                            key={place}
+                            className={matchPlace === place ? "active" : ""}
+                            onClick={() => setMatchPlace(place)}
+                          >
                             {place}
                           </button>
                         ))}
                       </div>
                     ) : (
-                      <input value={matchPlace} onChange={(e) => setMatchPlace(e.target.value)} placeholder="Стадион / поле" />
+                      <input
+                        value={matchPlace}
+                        onChange={(e) => setMatchPlace(e.target.value)}
+                        placeholder="Стадион / поле"
+                      />
                     )}
                   </div>
                 )}
@@ -1389,6 +1510,7 @@ export default function App() {
                           <td className="trainer-cell">{trainerName(year)}</td>
                           {(selectedWeek?.days || []).map((d) => {
                             const ev = eventFor(year, d.iso);
+
                             return (
                               <td key={d.iso} className="schedule-cell">
                                 <ScheduleEventView event={ev} />
@@ -1414,6 +1536,19 @@ export default function App() {
         </>
       )}
     </div>
+  );
+}
+
+function TimeSelect({ value, onChange }) {
+  return (
+    <select className="time-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Выбери время</option>
+      {timeOptions.map((time) => (
+        <option key={time} value={time}>
+          {time}
+        </option>
+      ))}
+    </select>
   );
 }
 
