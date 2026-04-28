@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { toPng } from "html-to-image";
 import "./style.css";
 
 const supabaseUrl = "https://cajlcifpnsacdmcofgem.supabase.co";
@@ -360,6 +361,8 @@ export default function App() {
     if (dynEventType !== "training") return [];
     return getTrainingProblems();
   }, [dynEventType, trainingData, dynEvents, dynSelectedDate, dynYear, editingEventId]);
+
+  const pageTitle = page === "dynamovets" ? "Расписание Динамовец" : "Расчёт аванса";
 
   useEffect(() => {
     loadAll();
@@ -1005,700 +1008,714 @@ export default function App() {
     if (!node) return;
 
     try {
-      const clone = node.cloneNode(true);
-      clone.style.background = "white";
+      const dataUrl = await toPng(node, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        width: node.scrollWidth,
+        height: node.scrollHeight,
+        style: {
+          transform: "none",
+        },
+      });
 
-      let css = "";
-
-      for (const sheet of Array.from(document.styleSheets)) {
-        try {
-          css += Array.from(sheet.cssRules)
-            .map((rule) => rule.cssText)
-            .join("\n");
-        } catch {
-          // пропускаем внешние стили, если браузер не даёт их читать
-        }
-      }
-
-      const html = `
-        <html xmlns="http://www.w3.org/1999/xhtml">
-          <head>
-            <style>
-              body { margin: 0; background: white; }
-              ${css}
-            </style>
-          </head>
-          <body>${clone.outerHTML}</body>
-        </html>
-      `;
-
-      const width = Math.max(node.scrollWidth, 1200);
-      const height = Math.max(node.scrollHeight, 500);
-
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-          <foreignObject width="100%" height="100%">
-            ${html}
-          </foreignObject>
-        </svg>
-      `;
-
-      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-
-      const img = new Image();
-
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = width * 2;
-        canvas.height = height * 2;
-
-        const ctx = canvas.getContext("2d");
-        ctx.scale(2, 2);
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0);
-
-        URL.revokeObjectURL(url);
-
-        const a = document.createElement("a");
-        a.download = `Динамовец_${selectedWeek?.label || "расписание"}_2026.png`;
-        a.href = canvas.toDataURL("image/png");
-        a.click();
-      };
-
-      img.src = url;
+      const link = document.createElement("a");
+      link.download = `Динамовец_${selectedWeek?.label || "расписание"}_2026.png`;
+      link.href = dataUrl;
+      link.click();
     } catch (e) {
-      setError("Не удалось скачать PNG: " + e.message);
+      setError("Не удалось создать PNG: " + e.message);
     }
   }
 
   return (
     <div className="app">
-      <header>
-        <div>
-          <h1>Расчёт аванса</h1>
-          <p>Такси, пицца и расписание академий</p>
-        </div>
-        <div className="status">{status}</div>
-      </header>
+      <div className="app-container">
+        <header className="topbar">
+          <div className="brand-block">
+            <div className="brand-word">РОДИНА</div>
+            <div className="brand-sub">Академия Динамовец</div>
+          </div>
 
-      <nav>
-        <button className={page === "calc" ? "active" : ""} onClick={() => setPage("calc")}>
-          Расчёт аванса
-        </button>
-        <button className={page === "manual" ? "active" : ""} onClick={() => setPage("manual")}>
-          Ручные матчи
-        </button>
-        <button className={page === "tariffs" ? "active" : ""} onClick={() => setPage("tariffs")}>
-          Тарифы
-        </button>
-        <button
-          className={page === "dynamovets" ? "active" : ""}
-          onClick={() => setPage("dynamovets")}
-        >
-          Расписание Динамовец
-        </button>
-      </nav>
+          <div className="title-block">
+            <h1>{pageTitle}</h1>
+            <p>Такси, пицца и расписание академий</p>
+          </div>
 
-      {error && <div className="error">{error}</div>}
+          <div className="status-pill">
+            <span className="status-dot" />
+            {status}
+          </div>
+        </header>
 
-      {page === "calc" && (
-        <>
-          <section className="card">
-            <h2>Месяц</h2>
-            <div className="buttons">
-              {advanceMonths.map(([num, name]) => (
-                <button
-                  key={num}
-                  className={month === num ? "active" : ""}
-                  onClick={() => {
-                    setMonth(num);
-                    setSelected({});
-                  }}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-            <button className="secondary" onClick={refreshGoogleMatches}>
-              Обновить Google-таблицу
-            </button>
-          </section>
+        <nav className="main-tabs">
+          <button className={page === "calc" ? "tab active" : "tab"} onClick={() => setPage("calc")}>
+            Расчёт аванса
+          </button>
+          <button className={page === "manual" ? "tab active" : "tab"} onClick={() => setPage("manual")}>
+            Ручные матчи
+          </button>
+          <button className={page === "tariffs" ? "tab active" : "tab"} onClick={() => setPage("tariffs")}>
+            Тарифы
+          </button>
+          <button
+            className={page === "dynamovets" ? "tab active" : "tab"}
+            onClick={() => setPage("dynamovets")}
+          >
+            Расписание Динамовец
+          </button>
+        </nav>
 
-          <section className="card">
-            <h2>Матчи месяца</h2>
-            <div className="matches">
-              {currentMatches.length === 0 && <div className="empty">Матчей нет</div>}
+        {error && <div className="error">{error}</div>}
 
-              {currentMatches.map((m) => {
-                const s = selected[m.id] || {};
-
-                return (
-                  <div className="match" key={m.id}>
-                    <div>
-                      <b>{m.team}</b>
-                      <span>
-                        {m.date}
-                        {manualTeams.includes(m.team) ? ` · ${m.match_type}` : ""}
-                      </span>
-                    </div>
-                    <div>{m.opponent}</div>
-                    <button
-                      className={s.taxi ? "service on" : "service"}
-                      onClick={() => toggle(m.id, "taxi")}
-                    >
-                      Такси
-                    </button>
-                    <button
-                      className={s.pizza ? "service on" : "service"}
-                      onClick={() => toggle(m.id, "pizza")}
-                    >
-                      Пицца
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="card">
-            <h2>Итоговая таблица</h2>
-            <Table rows={selectedRows} />
-            <div className="total">ИТОГО: {money(total)}</div>
-            <button className="primary" onClick={printPdf}>
-              PDF / печать
-            </button>
-          </section>
-        </>
-      )}
-
-      {page === "manual" && (
-        <section className="card">
-          <h2>Ручные матчи</h2>
-
-          <div className="manual-form">
-            <div className="form-group">
-              <label>Команда</label>
-              <div className="buttons">
-                {manualTeams.map((t) => (
-                  <button
-                    key={t}
-                    className={formTeam === t ? "active" : ""}
-                    onClick={() => setFormTeam(t)}
-                  >
-                    {t}
-                  </button>
-                ))}
+        {page === "calc" && (
+          <>
+            <section className="card">
+              <div className="card-header">
+                <h2>Месяц</h2>
               </div>
-            </div>
 
-            <div className="form-group">
-              <label>Месяц</label>
-              <div className="buttons">
+              <div className="pill-group">
                 {advanceMonths.map(([num, name]) => (
                   <button
                     key={num}
-                    className={formMonth === num ? "active" : ""}
-                    onClick={() => setFormMonth(num)}
+                    className={month === num ? "pill active" : "pill"}
+                    onClick={() => {
+                      setMonth(num);
+                      setSelected({});
+                    }}
                   >
                     {name}
                   </button>
                 ))}
               </div>
-            </div>
 
-            <div className="form-group">
-              <label>День</label>
-              <input value={formDay} onChange={(e) => setFormDay(e.target.value)} placeholder="12" />
-            </div>
-
-            <div className="form-group">
-              <label>Соперник</label>
-              <input
-                value={formOpponent}
-                onChange={(e) => setFormOpponent(e.target.value)}
-                placeholder="Спартак"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Тип матча</label>
-              <div className="buttons">
-                <button
-                  className={formType === "дом" ? "active" : ""}
-                  onClick={() => setFormType("дом")}
-                >
-                  Дом
-                </button>
-                <button
-                  className={formType === "выезд" ? "active" : ""}
-                  onClick={() => setFormType("выезд")}
-                >
-                  Выезд
-                </button>
-              </div>
-            </div>
-
-            <div className="manual-actions">
-              <button className="primary add-match-button" onClick={addManualMatch}>
-                Добавить матч
-              </button>
-            </div>
-          </div>
-
-          <h3>Добавленные матчи</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Команда</th>
-                <th>Дата</th>
-                <th>Соперник</th>
-                <th>Тип</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {manualMatches.map((m) => (
-                <tr key={m.id}>
-                  <td>{m.team}</td>
-                  <td>
-                    {String(m.day).padStart(2, "0")}.{String(m.month).padStart(2, "0")}
-                  </td>
-                  <td>{m.opponent}</td>
-                  <td>{m.match_type}</td>
-                  <td>
-                    <button className="danger" onClick={() => deleteManualMatch(m.id)}>
-                      Удалить
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
-
-      {page === "tariffs" && (
-        <section className="card">
-          <h2>Тарифы</h2>
-
-          {allTeams.map((team) => (
-            <div className="tariff" key={team}>
-              <b>{team}</b>
-
-              {manualTeams.includes(team) ? (
-                <>
-                  <TariffInput
-                    label="Дом · такси"
-                    value={tariffFor(team, "дом").taxi_amount}
-                    onChange={(v) => updateTariffLocal(team, "дом", "taxi_amount", v)}
-                  />
-                  <TariffInput
-                    label="Дом · пицца"
-                    value={tariffFor(team, "дом").pizza_amount}
-                    onChange={(v) => updateTariffLocal(team, "дом", "pizza_amount", v)}
-                  />
-                  <TariffInput
-                    label="Выезд · такси"
-                    value={tariffFor(team, "выезд").taxi_amount}
-                    onChange={(v) => updateTariffLocal(team, "выезд", "taxi_amount", v)}
-                  />
-                  <TariffInput
-                    label="Выезд · пицца"
-                    value={tariffFor(team, "выезд").pizza_amount}
-                    onChange={(v) => updateTariffLocal(team, "выезд", "pizza_amount", v)}
-                  />
-                </>
-              ) : (
-                <>
-                  <TariffInput
-                    label="Такси"
-                    value={tariffFor(team, "выезд").taxi_amount}
-                    onChange={(v) => updateTariffLocal(team, "выезд", "taxi_amount", v)}
-                  />
-                  <TariffInput
-                    label="Пицца"
-                    value={tariffFor(team, "выезд").pizza_amount}
-                    onChange={(v) => updateTariffLocal(team, "выезд", "pizza_amount", v)}
-                  />
-                </>
-              )}
-            </div>
-          ))}
-
-          <button className="primary" onClick={saveTariffs}>
-            Сохранить тарифы
-          </button>
-        </section>
-      )}
-
-      {page === "dynamovets" && (
-        <>
-          <section className="card">
-            <h2>Расписание Динамовец</h2>
-            <div className="buttons">
-              <button
-                className={dynTab === "schedule" ? "active" : ""}
-                onClick={() => setDynTab("schedule")}
-              >
-                Расписание
-              </button>
-              <button
-                className={dynTab === "trainers" ? "active" : ""}
-                onClick={() => setDynTab("trainers")}
-              >
-                Тренеры
-              </button>
-            </div>
-          </section>
-
-          {dynTab === "trainers" && (
-            <section className="card">
-              <h2>Тренеры Динамовца</h2>
-
-              <div className="trainer-grid">
-                {dynamovetsYears.map((year) => (
-                  <div className="trainer-row" key={year}>
-                    <b>{year}</b>
-                    <input
-                      value={trainerName(year)}
-                      onChange={(e) => updateTrainerLocal(year, e.target.value)}
-                      placeholder="Имя Фамилия"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <button className="primary" onClick={saveTrainers}>
-                Сохранить тренеров
+              <button className="btn btn-outline" onClick={refreshGoogleMatches}>
+                Обновить Google-таблицу
               </button>
             </section>
-          )}
 
-          {dynTab === "schedule" && (
-            <>
-              <section className="card">
-                <h2>Выбор периода</h2>
+            <section className="card">
+              <div className="card-header">
+                <h2>Матчи месяца</h2>
+              </div>
 
-                <label>Месяц 2026</label>
-                <div className="buttons">
-                  {yearMonths.map(([num, name]) => (
+              <div className="matches">
+                {currentMatches.length === 0 && (
+                  <div className="empty">
+                    <div className="empty-icon">⚽</div>
+                    <b>Матчей нет</b>
+                    <span>В выбранном месяце нет матчей.</span>
+                  </div>
+                )}
+
+                {currentMatches.map((m) => {
+                  const s = selected[m.id] || {};
+
+                  return (
+                    <div className="match" key={m.id}>
+                      <div>
+                        <b>{m.team}</b>
+                        <span>
+                          {m.date}
+                          {manualTeams.includes(m.team) ? ` · ${m.match_type}` : ""}
+                        </span>
+                      </div>
+                      <div>{m.opponent}</div>
+                      <button
+                        className={s.taxi ? "service on" : "service"}
+                        onClick={() => toggle(m.id, "taxi")}
+                      >
+                        Такси
+                      </button>
+                      <button
+                        className={s.pizza ? "service on" : "service"}
+                        onClick={() => toggle(m.id, "pizza")}
+                      >
+                        Пицца
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="card-header">
+                <h2>Итоговая таблица</h2>
+              </div>
+
+              <Table rows={selectedRows} />
+
+              <div className="total">ИТОГО: {money(total)}</div>
+
+              <button className="btn btn-primary" onClick={printPdf}>
+                PDF / печать
+              </button>
+            </section>
+          </>
+        )}
+
+        {page === "manual" && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Ручные матчи</h2>
+            </div>
+
+            <div className="form-stack">
+              <div className="form-group">
+                <label>Команда</label>
+                <div className="pill-group">
+                  {manualTeams.map((t) => (
+                    <button
+                      key={t}
+                      className={formTeam === t ? "pill active" : "pill"}
+                      onClick={() => setFormTeam(t)}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Месяц</label>
+                <div className="pill-group">
+                  {advanceMonths.map(([num, name]) => (
                     <button
                       key={num}
-                      className={dynMonth === num ? "active" : ""}
-                      onClick={() => {
-                        const weeks = getWeeksForMonth2026(num);
-                        setDynMonth(num);
-                        setDynWeekStart(weeks[0]?.startIso || "");
-                        setDynSelectedDate(weeks[0]?.days[0]?.iso || "");
-                      }}
+                      className={formMonth === num ? "pill active" : "pill"}
+                      onClick={() => setFormMonth(num)}
                     >
                       {name}
                     </button>
                   ))}
                 </div>
+              </div>
 
-                <label>Неделя</label>
-                <div className="buttons">
-                  {dynWeeks.map((w) => (
-                    <button
-                      key={w.startIso}
-                      className={dynWeekStart === w.startIso ? "active" : ""}
-                      onClick={() => {
-                        setDynWeekStart(w.startIso);
-                        setDynSelectedDate(w.days[0].iso);
-                      }}
-                    >
-                      {w.label}
-                    </button>
-                  ))}
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>День</label>
+                  <input value={formDay} onChange={(e) => setFormDay(e.target.value)} placeholder="12" />
                 </div>
-
-                <label>День</label>
-                <div className="buttons">
-                  {(selectedWeek?.days || []).map((d) => (
-                    <button
-                      key={d.iso}
-                      className={dynSelectedDate === d.iso ? "active" : ""}
-                      onClick={() => setDynSelectedDate(d.iso)}
-                    >
-                      {d.label} {d.date}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="card">
-                <h2>{editingEventId ? "Изменить событие" : "Добавить событие"}</h2>
 
                 <div className="form-group">
-                  <label>Команда / год</label>
-                  <div className="buttons">
-                    {dynamovetsYears.map((year) => (
-                      <button
-                        key={year}
-                        className={dynYear === year ? "active" : ""}
-                        onClick={() => setDynYear(year)}
-                      >
-                        {year}
-                      </button>
-                    ))}
-                  </div>
+                  <label>Соперник</label>
+                  <input
+                    value={formOpponent}
+                    onChange={(e) => setFormOpponent(e.target.value)}
+                    placeholder="Спартак"
+                  />
                 </div>
+              </div>
 
-                {existingSelectedEvent() && !editingEventId && (
-                  <div className="notice">
-                    На эту дату у {dynYear} уже есть событие. Можно изменить существующее или
-                    удалить его.
-                    <div className="notice-actions">
-                      <button
-                        className="primary"
-                        onClick={() => startEditEvent(existingSelectedEvent())}
-                      >
-                        Изменить существующее
-                      </button>
-                      <button
-                        className="danger"
-                        onClick={() => deleteDynEvent(existingSelectedEvent().id)}
-                      >
+              <div className="form-group">
+                <label>Тип матча</label>
+                <div className="pill-group">
+                  <button
+                    className={formType === "дом" ? "pill active" : "pill"}
+                    onClick={() => setFormType("дом")}
+                  >
+                    Дом
+                  </button>
+                  <button
+                    className={formType === "выезд" ? "pill active" : "pill"}
+                    onClick={() => setFormType("выезд")}
+                  >
+                    Выезд
+                  </button>
+                </div>
+              </div>
+
+              <button className="btn btn-primary" onClick={addManualMatch}>
+                Добавить матч
+              </button>
+            </div>
+
+            <h3>Добавленные матчи</h3>
+
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Команда</th>
+                  <th>Дата</th>
+                  <th>Соперник</th>
+                  <th>Тип</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {manualMatches.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.team}</td>
+                    <td>
+                      {String(m.day).padStart(2, "0")}.{String(m.month).padStart(2, "0")}
+                    </td>
+                    <td>{m.opponent}</td>
+                    <td>{m.match_type}</td>
+                    <td>
+                      <button className="btn-small danger" onClick={() => deleteManualMatch(m.id)}>
                         Удалить
                       </button>
-                    </div>
-                  </div>
-                )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
-                <div className="form-group">
-                  <label>Тип события</label>
-                  <div className="buttons">
-                    <button
-                      className={dynEventType === "training" ? "active" : ""}
-                      onClick={() => setDynEventType("training")}
-                    >
-                      Тренировка
-                    </button>
-                    <button
-                      className={dynEventType === "match" ? "active" : ""}
-                      onClick={() => setDynEventType("match")}
-                    >
-                      Матч
-                    </button>
-                    <button
-                      className={dynEventType === "day_off" ? "active" : ""}
-                      onClick={() => setDynEventType("day_off")}
-                    >
-                      Выходной
-                    </button>
-                  </div>
+        {page === "tariffs" && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Тарифы</h2>
+            </div>
+
+            <div className="tariff-list">
+              {allTeams.map((team) => (
+                <div className="tariff" key={team}>
+                  <b>{team}</b>
+
+                  {manualTeams.includes(team) ? (
+                    <>
+                      <TariffInput
+                        label="Дом · такси"
+                        value={tariffFor(team, "дом").taxi_amount}
+                        onChange={(v) => updateTariffLocal(team, "дом", "taxi_amount", v)}
+                      />
+                      <TariffInput
+                        label="Дом · пицца"
+                        value={tariffFor(team, "дом").pizza_amount}
+                        onChange={(v) => updateTariffLocal(team, "дом", "pizza_amount", v)}
+                      />
+                      <TariffInput
+                        label="Выезд · такси"
+                        value={tariffFor(team, "выезд").taxi_amount}
+                        onChange={(v) => updateTariffLocal(team, "выезд", "taxi_amount", v)}
+                      />
+                      <TariffInput
+                        label="Выезд · пицца"
+                        value={tariffFor(team, "выезд").pizza_amount}
+                        onChange={(v) => updateTariffLocal(team, "выезд", "pizza_amount", v)}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <TariffInput
+                        label="Такси"
+                        value={tariffFor(team, "выезд").taxi_amount}
+                        onChange={(v) => updateTariffLocal(team, "выезд", "taxi_amount", v)}
+                      />
+                      <TariffInput
+                        label="Пицца"
+                        value={tariffFor(team, "выезд").pizza_amount}
+                        onChange={(v) => updateTariffLocal(team, "выезд", "pizza_amount", v)}
+                      />
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button className="btn btn-primary" onClick={saveTariffs}>
+              Сохранить тарифы
+            </button>
+          </section>
+        )}
+
+        {page === "dynamovets" && (
+          <>
+            <section className="card compact-card">
+              <div className="card-header">
+                <h2>Расписание Динамовец</h2>
+              </div>
+
+              <div className="sub-tabs">
+                <button
+                  className={dynTab === "schedule" ? "sub-tab active" : "sub-tab"}
+                  onClick={() => setDynTab("schedule")}
+                >
+                  Расписание
+                </button>
+                <button
+                  className={dynTab === "trainers" ? "sub-tab active" : "sub-tab"}
+                  onClick={() => setDynTab("trainers")}
+                >
+                  Тренеры
+                </button>
+              </div>
+            </section>
+
+            {dynTab === "trainers" && (
+              <section className="card">
+                <div className="card-header">
+                  <h2>Тренеры Динамовца</h2>
                 </div>
 
-                {dynEventType === "training" && (
+                <div className="trainer-grid">
+                  {dynamovetsYears.map((year) => (
+                    <div className="trainer-row" key={year}>
+                      <b>{year}</b>
+                      <input
+                        value={trainerName(year)}
+                        onChange={(e) => updateTrainerLocal(year, e.target.value)}
+                        placeholder="Имя Фамилия"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <button className="btn btn-primary" onClick={saveTrainers}>
+                  Сохранить тренеров
+                </button>
+              </section>
+            )}
+
+            {dynTab === "schedule" && (
+              <>
+                <section className="card">
+                  <div className="card-header">
+                    <h2>Выбор периода</h2>
+                  </div>
+
                   <div className="form-group">
-                    <label>Место тренировки</label>
-                    <div className="buttons place-buttons">
-                      {trainingPlaces.map((place) => (
+                    <label>Месяц 2026</label>
+                    <div className="pill-group">
+                      {yearMonths.map(([num, name]) => (
                         <button
-                          key={place}
-                          className={trainingData[place] ? "active" : ""}
-                          onClick={() => toggleTrainingPlace(place)}
+                          key={num}
+                          className={dynMonth === num ? "pill active" : "pill"}
+                          onClick={() => {
+                            const weeks = getWeeksForMonth2026(num);
+                            setDynMonth(num);
+                            setDynWeekStart(weeks[0]?.startIso || "");
+                            setDynSelectedDate(weeks[0]?.days[0]?.iso || "");
+                          }}
                         >
-                          {place}
+                          {name}
                         </button>
                       ))}
                     </div>
+                  </div>
 
-                    {trainingProblems.length > 0 && (
-                      <div className="notice">
-                        {trainingProblems.map((problem, index) => (
-                          <div key={index}>{problem.message}</div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="training-items-list">
-                      {Object.entries(trainingData).map(([place, data]) => (
-                        <div className="training-item-form" key={place}>
-                          <div className="training-place-title">{place}</div>
-
-                          <TimePicker
-                            label="Начало"
-                            value={data.start || ""}
-                            targetKey={`${place}-start`}
-                            activeTimeTarget={activeTimeTarget}
-                            setActiveTimeTarget={setActiveTimeTarget}
-                            onChange={(value) => updateTrainingPlace(place, "start", value)}
-                          />
-
-                          <TimePicker
-                            label="Окончание"
-                            value={data.end || ""}
-                            targetKey={`${place}-end`}
-                            activeTimeTarget={activeTimeTarget}
-                            setActiveTimeTarget={setActiveTimeTarget}
-                            onChange={(value) => updateTrainingPlace(place, "end", value)}
-                          />
-
-                          {place !== "Зал" && (
-                            <div className="buttons field-size-buttons">
-                              <button
-                                className={data.field_size === "Полное поле" ? "active" : ""}
-                                onClick={() =>
-                                  updateTrainingPlace(place, "field_size", "Полное поле")
-                                }
-                              >
-                                Полное поле
-                              </button>
-                              <button
-                                className={data.field_size === "1/2 поля" ? "active" : ""}
-                                onClick={() => updateTrainingPlace(place, "field_size", "1/2 поля")}
-                              >
-                                1/2 поля
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                  <div className="form-group">
+                    <label>Неделя</label>
+                    <div className="pill-group">
+                      {dynWeeks.map((w) => (
+                        <button
+                          key={w.startIso}
+                          className={dynWeekStart === w.startIso ? "pill active" : "pill"}
+                          onClick={() => {
+                            setDynWeekStart(w.startIso);
+                            setDynSelectedDate(w.days[0].iso);
+                          }}
+                        >
+                          {w.label}
+                        </button>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {dynEventType === "match" && (
-                  <div className="match-form">
-                    <label>Дом / выезд</label>
-                    <div className="buttons">
+                  <div className="form-group">
+                    <label>День</label>
+                    <div className="pill-group">
+                      {(selectedWeek?.days || []).map((d) => (
+                        <button
+                          key={d.iso}
+                          className={dynSelectedDate === d.iso ? "pill active" : "pill"}
+                          onClick={() => setDynSelectedDate(d.iso)}
+                        >
+                          {d.label} {d.date}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="card">
+                  <div className="card-header">
+                    <h2>{editingEventId ? "Изменить событие" : "Добавить событие"}</h2>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Команда / год</label>
+                    <div className="pill-group">
+                      {dynamovetsYears.map((year) => (
+                        <button
+                          key={year}
+                          className={dynYear === year ? "pill active" : "pill"}
+                          onClick={() => setDynYear(year)}
+                        >
+                          {year}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {existingSelectedEvent() && !editingEventId && (
+                    <div className="notice">
+                      На эту дату у {dynYear} уже есть событие.
+                      <div className="notice-actions">
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => startEditEvent(existingSelectedEvent())}
+                        >
+                          Изменить существующее
+                        </button>
+                        <button className="btn btn-danger" onClick={() => deleteDynEvent(existingSelectedEvent().id)}>
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label>Тип события</label>
+                    <div className="segmented">
                       <button
-                        className={matchHomeAway === "home" ? "active" : ""}
-                        onClick={() => {
-                          setMatchHomeAway("home");
-                          setMatchPlace("Родина №1");
-                        }}
+                        className={dynEventType === "training" ? "segment active" : "segment"}
+                        onClick={() => setDynEventType("training")}
                       >
-                        Дом
+                        Тренировка
                       </button>
                       <button
-                        className={matchHomeAway === "away" ? "active" : ""}
-                        onClick={() => {
-                          setMatchHomeAway("away");
-                          setMatchPlace("");
-                        }}
+                        className={dynEventType === "match" ? "segment active" : "segment"}
+                        onClick={() => setDynEventType("match")}
                       >
-                        Выезд
+                        Матч
+                      </button>
+                      <button
+                        className={dynEventType === "day_off" ? "segment active" : "segment"}
+                        onClick={() => setDynEventType("day_off")}
+                      >
+                        Выходной
                       </button>
                     </div>
+                  </div>
 
-                    <TimePicker
-                      label="Время матча"
-                      value={matchTime}
-                      targetKey="match-time"
-                      activeTimeTarget={activeTimeTarget}
-                      setActiveTimeTarget={setActiveTimeTarget}
-                      onChange={setMatchTime}
-                    />
-
-                    <label>Турнир</label>
-                    <input
-                      value={matchTournament}
-                      onChange={(e) => setMatchTournament(e.target.value)}
-                      placeholder="ЛПМ"
-                    />
-
-                    <label>Соперник</label>
-                    <input
-                      value={matchOpponent}
-                      onChange={(e) => setMatchOpponent(e.target.value)}
-                      placeholder="Космос"
-                    />
-
-                    <label>Поле / стадион</label>
-                    {matchHomeAway === "home" ? (
-                      <div className="buttons">
-                        {homeMatchPlaces.map((place) => (
+                  {dynEventType === "training" && (
+                    <div className="form-group">
+                      <label>Место тренировки</label>
+                      <div className="place-grid">
+                        {trainingPlaces.map((place) => (
                           <button
                             key={place}
-                            className={matchPlace === place ? "active" : ""}
-                            onClick={() => setMatchPlace(place)}
+                            className={trainingData[place] ? "place-card active" : "place-card"}
+                            onClick={() => toggleTrainingPlace(place)}
                           >
                             {place}
                           </button>
                         ))}
                       </div>
-                    ) : (
-                      <input
-                        value={matchPlace}
-                        onChange={(e) => setMatchPlace(e.target.value)}
-                        placeholder="Стадион / поле"
+
+                      {trainingProblems.length > 0 && (
+                        <div className="notice danger-notice">
+                          {trainingProblems.map((problem, index) => (
+                            <div key={index}>{problem.message}</div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="training-items-list">
+                        {Object.entries(trainingData).map(([place, data]) => (
+                          <div className="training-item-form" key={place}>
+                            <div className="training-place-title">{place}</div>
+
+                            <TimePicker
+                              label="Начало"
+                              value={data.start || ""}
+                              targetKey={`${place}-start`}
+                              activeTimeTarget={activeTimeTarget}
+                              setActiveTimeTarget={setActiveTimeTarget}
+                              onChange={(value) => updateTrainingPlace(place, "start", value)}
+                            />
+
+                            <TimePicker
+                              label="Окончание"
+                              value={data.end || ""}
+                              targetKey={`${place}-end`}
+                              activeTimeTarget={activeTimeTarget}
+                              setActiveTimeTarget={setActiveTimeTarget}
+                              onChange={(value) => updateTrainingPlace(place, "end", value)}
+                            />
+
+                            {place !== "Зал" && (
+                              <div className="field-size-buttons">
+                                <button
+                                  className={data.field_size === "Полное поле" ? "pill active" : "pill"}
+                                  onClick={() => updateTrainingPlace(place, "field_size", "Полное поле")}
+                                >
+                                  Полное поле
+                                </button>
+                                <button
+                                  className={data.field_size === "1/2 поля" ? "pill active" : "pill"}
+                                  onClick={() => updateTrainingPlace(place, "field_size", "1/2 поля")}
+                                >
+                                  1/2 поля
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {dynEventType === "match" && (
+                    <div className="form-stack">
+                      <div className="form-group">
+                        <label>Дом / выезд</label>
+                        <div className="pill-group">
+                          <button
+                            className={matchHomeAway === "home" ? "pill active" : "pill"}
+                            onClick={() => {
+                              setMatchHomeAway("home");
+                              setMatchPlace("Родина №1");
+                            }}
+                          >
+                            Дом
+                          </button>
+                          <button
+                            className={matchHomeAway === "away" ? "pill active" : "pill"}
+                            onClick={() => {
+                              setMatchHomeAway("away");
+                              setMatchPlace("");
+                            }}
+                          >
+                            Выезд
+                          </button>
+                        </div>
+                      </div>
+
+                      <TimePicker
+                        label="Время матча"
+                        value={matchTime}
+                        targetKey="match-time"
+                        activeTimeTarget={activeTimeTarget}
+                        setActiveTimeTarget={setActiveTimeTarget}
+                        onChange={setMatchTime}
                       />
+
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Турнир</label>
+                          <input
+                            value={matchTournament}
+                            onChange={(e) => setMatchTournament(e.target.value)}
+                            placeholder="ЛПМ"
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label>Соперник</label>
+                          <input
+                            value={matchOpponent}
+                            onChange={(e) => setMatchOpponent(e.target.value)}
+                            placeholder="Космос"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Поле / стадион</label>
+                        {matchHomeAway === "home" ? (
+                          <div className="pill-group">
+                            {homeMatchPlaces.map((place) => (
+                              <button
+                                key={place}
+                                className={matchPlace === place ? "pill active" : "pill"}
+                                onClick={() => setMatchPlace(place)}
+                              >
+                                {place}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <input
+                            value={matchPlace}
+                            onChange={(e) => setMatchPlace(e.target.value)}
+                            placeholder="Стадион / поле"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="action-row">
+                    <button className="btn btn-primary" onClick={saveDynEvent}>
+                      {editingEventId ? "Сохранить изменения" : "Сохранить событие"}
+                    </button>
+
+                    {editingEventId && (
+                      <button className="btn btn-outline" onClick={resetDynForm}>
+                        Отмена редактирования
+                      </button>
                     )}
                   </div>
-                )}
+                </section>
 
-                <div className="manual-actions">
-                  <button className="primary add-match-button" onClick={saveDynEvent}>
-                    {editingEventId ? "Сохранить изменения" : "Сохранить событие"}
-                  </button>
-                  {editingEventId && (
-                    <button className="secondary" onClick={resetDynForm}>
-                      Отмена редактирования
+                <section className="card">
+                  <div className="card-header split">
+                    <h2>Таблица расписания</h2>
+                    <button className="btn btn-primary" onClick={downloadSchedulePng}>
+                      Скачать PNG
                     </button>
-                  )}
-                </div>
-              </section>
+                  </div>
 
-              <section className="card">
-                <div className="schedule-toolbar">
-                  <h2>Таблица расписания</h2>
-                  <button className="primary" onClick={downloadSchedulePng}>
-                    Скачать PNG
-                  </button>
-                </div>
+                  <div className="schedule-scroll">
+                    <div className="schedule-export" ref={scheduleRef}>
+                      <div className="schedule-titlebar">АКАДЕМИЯ ДИНАМОВЕЦ</div>
 
-                <div className="schedule-wrap" ref={scheduleRef}>
-                  <table className="schedule-table">
-                    <thead>
-                      <tr>
-                        <th>Год</th>
-                        <th>Тренер</th>
-                        {(selectedWeek?.days || []).map((d) => (
-                          <th key={d.iso}>
-                            {d.label}
-                            <br />
-                            {d.date}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dynamovetsYears.map((year) => (
-                        <tr key={year}>
-                          <td className="year-cell">{year}</td>
-                          <td className="trainer-cell">{trainerName(year)}</td>
-                          {(selectedWeek?.days || []).map((d) => {
-                            const ev = eventFor(year, d.iso);
+                      <table className="schedule-table">
+                        <thead>
+                          <tr>
+                            <th>Год</th>
+                            <th>Тренер</th>
+                            {(selectedWeek?.days || []).map((d) => (
+                              <th key={d.iso}>
+                                {d.label}
+                                <br />
+                                {d.date}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dynamovetsYears.map((year) => (
+                            <tr key={year}>
+                              <td className="year-cell">{year}</td>
+                              <td className="trainer-cell">{trainerName(year)}</td>
+                              {(selectedWeek?.days || []).map((d) => {
+                                const ev = eventFor(year, d.iso);
 
-                            return (
-                              <td key={d.iso} className="schedule-cell">
-                                <ScheduleEventView event={ev} />
-                                {ev && (
-                                  <div className="cell-actions">
-                                    <button onClick={() => startEditEvent(ev)}>Изм.</button>
-                                    <button className="danger" onClick={() => deleteDynEvent(ev.id)}>
-                                      Уд.
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </>
-          )}
-        </>
-      )}
+                                return (
+                                  <td key={d.iso} className="schedule-cell">
+                                    <ScheduleEventView event={ev} />
+                                    {ev && (
+                                      <div className="cell-actions">
+                                        <button onClick={() => startEditEvent(ev)}>Изм.</button>
+                                        <button className="danger" onClick={() => deleteDynEvent(ev.id)}>
+                                          Уд.
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      <div className="schedule-bottombar">АКАДЕМИЯ ДИНАМОВЕЦ</div>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1716,6 +1733,7 @@ function TimePicker({
   return (
     <div className="time-picker">
       <label>{label}</label>
+
       <button
         type="button"
         className={value ? "time-main active" : "time-main"}
@@ -1792,7 +1810,7 @@ function ScheduleEventView({ event }) {
 
 function TariffInput({ label, value, onChange }) {
   return (
-    <div>
+    <div className="tariff-input">
       <label>{label}, ₽</label>
       <input type="number" min="0" value={value || 0} onChange={(e) => onChange(e.target.value)} />
     </div>
@@ -1800,10 +1818,16 @@ function TariffInput({ label, value, onChange }) {
 }
 
 function Table({ rows }) {
-  if (!rows.length) return <div className="empty">Пока не выбрано такси или пицца</div>;
+  if (!rows.length) {
+    return (
+      <div className="empty">
+        <b>Пока не выбрано такси или пицца</b>
+      </div>
+    );
+  }
 
   return (
-    <table>
+    <table className="data-table">
       <thead>
         <tr>
           <th>Команда</th>
