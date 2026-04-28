@@ -118,12 +118,13 @@ button.danger {
 }
 
 .card h2 {
-  margin: 0 0 14px;
+  margin: 0 0 22px;
   font-size: 20px;
 }
 
 .card h3 {
-  margin-top: 22px;
+  margin-top: 34px;
+  margin-bottom: 14px;
 }
 
 .error {
@@ -172,7 +173,7 @@ label {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
-  margin: 14px 0 6px;
+  margin: 18px 0 8px;
 }
 
 input {
@@ -188,6 +189,17 @@ input {
 input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(37, 99, 235, .1);
+}
+
+.card > .buttons {
+  margin-bottom: 8px;
+}
+
+.card > button.primary {
+  display: block;
+  width: fit-content;
+  margin-top: 18px;
+  margin-bottom: 30px;
 }
 
 table {
@@ -263,6 +275,12 @@ tr:last-child td {
 
   .tariff {
     grid-template-columns: 1fr;
+  }
+
+  .card > button.primary {
+    width: 100%;
+    margin-top: 18px;
+    margin-bottom: 30px;
   }
 
   table {
