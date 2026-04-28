@@ -11,7 +11,8 @@
     "react-dom": "latest",
     "@supabase/supabase-js": "latest",
     "jspdf": "latest",
-    "jspdf-autotable": "latest"
+    "jspdf-autotable": "latest",
+    "html-to-image": "latest"
   },
   "devDependencies": {}
 }
