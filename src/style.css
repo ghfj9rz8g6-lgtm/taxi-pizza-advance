@@ -36,6 +36,23 @@ header {
   margin-bottom: 22px;
 }
 
+header::before {
+  content: "Академия Динамовец";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: #111827;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+}
+
 h1 {
   margin: 0;
   font-size: 30px;
@@ -455,14 +472,45 @@ tr:last-child td {
 .schedule-wrap {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   background: white;
   border-radius: 16px;
+  padding-bottom: 28px;
+  scrollbar-gutter: stable both-edges;
+}
+
+.schedule-wrap::before,
+.schedule-wrap::after {
+  content: "Академия Динамовец";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1180px;
+  height: 42px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.schedule-wrap::before {
+  border-radius: 16px 16px 0 0;
+  margin-bottom: 0;
+}
+
+.schedule-wrap::after {
+  border-radius: 0 0 16px 16px;
+  margin-top: 0;
 }
 
 .schedule-table {
   min-width: 1180px;
   border-collapse: collapse;
   margin-top: 0;
+  margin-bottom: 0;
+  border-radius: 0;
 }
 
 .schedule-table th,
@@ -572,6 +620,10 @@ tr:last-child td {
 
   header {
     flex-direction: column;
+  }
+
+  header::before {
+    width: 100%;
   }
 
   .status {
